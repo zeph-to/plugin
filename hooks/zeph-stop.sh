@@ -107,8 +107,16 @@ SUMMARY=$(jq -rs "$JQ_SINCE_USER"'
     | last // ""
 ' "$TRANSCRIPT" 2>/dev/null)
 
-# UTF-8 safe trim to ~280 chars (phone push bodies are short). Falls back to
-# pass-through if python3 is unavailable.
+# Match the original 0.4.0 behavior of passing the full assistant summary
+# through to `zeph notify`. The CLI itself decides what to do with long
+# bodies — anything over 512 bytes is auto-uploaded as a file attachment
+# and the push gets a 200-char preview plus a file link.
+#
+# Previous 0.5.0–0.5.2 trimmed to 280 chars here, which collapsed
+# English-mostly summaries under the 512-byte threshold and suppressed the
+# file-upload path — the push arrived truncated with no way to read the
+# rest. This restores the 5000-codepoint cap from 0.4.0 (UTF-8 safe via
+# python3, falling through to cat if python is missing).
 trim_chars() {
     local n="$1"
     if command -v python3 >/dev/null 2>&1; then
@@ -124,7 +132,12 @@ sys.stdout.write(sys.stdin.read()[:n])
 
 BODY="${BRANCH} — ${TOOL_COUNT} tools"
 if [ -n "$SUMMARY" ] && [ "$SUMMARY" != "null" ]; then
-    TRIMMED=$(printf '%s' "$SUMMARY" | trim_chars 280)
+    # Match the original 0.4.0 behavior (jq's `.[0:5000]`) — 5000 codepoints
+    # is enough to trigger zeph-cli's >512-byte file-upload path for any
+    # multi-paragraph summary, while still capping runaway content. The
+    # `[ -n "$TRIMMED" ]` guard preserves the default BODY if trim_chars
+    # somehow returns empty (defense in depth — same as 0.4.0 had).
+    TRIMMED=$(printf '%s' "$SUMMARY" | trim_chars 5000)
     [ -n "$TRIMMED" ] && BODY="$TRIMMED"
 fi
 
