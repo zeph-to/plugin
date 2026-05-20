@@ -79,7 +79,16 @@ json.dump(d, open(f, 'w'), indent=2)
 "
 }
 
-LOCAL_VERSION="0.4.0"
+# Read version from the canonical source so we don't drift from plugin.json.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_JSON="$SCRIPT_DIR/.claude-plugin/plugin.json"
+if [ -f "$PLUGIN_JSON" ] && command -v python3 >/dev/null 2>&1; then
+  LOCAL_VERSION=$(python3 -c "import json; print(json.load(open('$PLUGIN_JSON'))['version'])" 2>/dev/null || echo "0.0.0")
+else
+  # When piped from curl, the script isn't on disk — fetch the version inline.
+  LOCAL_VERSION=$(curl -fsSL "https://raw.githubusercontent.com/$REPO/main/.claude-plugin/plugin.json" 2>/dev/null \
+    | python3 -c "import json,sys; print(json.load(sys.stdin)['version'])" 2>/dev/null || echo "0.0.0")
+fi
 
 # ── Skills CLI Helper ─────────────────────────────────────────────────────
 install_skills() {
@@ -298,10 +307,36 @@ if ! command -v npm >/dev/null 2>&1; then
   fail "npm not found — install Node.js first"
   exit 1
 fi
+
+# Resolve a user-writable npm prefix so we never need sudo. `sudo npm` is
+# unsafe — npm runs package install scripts as the elevated user, which is a
+# supply-chain hazard. Prefer the user's existing prefix (nvm/asdf/fnm), or
+# fall back to ~/.local for a vanilla install.
+NPM_PREFIX="$(npm config get prefix 2>/dev/null || echo "")"
+PREFIX_FLAG=""
+if [ -z "$NPM_PREFIX" ] || [ ! -w "$NPM_PREFIX" ]; then
+  PREFIX_FLAG="--prefix=$HOME/.local"
+  echo "  Using user prefix: $HOME/.local (no sudo required)"
+fi
+
 if [ $DRY -eq 0 ]; then
-  npm install -g @zeph-to/mcp-server@latest @zeph-to/hook-sdk@latest 2>&1 | tail -1 && ok "MCP server & CLI installed" || fail "Install failed — try: sudo npm install -g @zeph-to/mcp-server@latest @zeph-to/hook-sdk@latest"
+  if npm install -g $PREFIX_FLAG @zeph-to/mcp-server@latest @zeph-to/hook-sdk@latest 2>&1 | tail -1; then
+    ok "MCP server & CLI installed"
+    if [ -n "$PREFIX_FLAG" ] && ! echo ":$PATH:" | grep -q ":$HOME/.local/bin:"; then
+      echo ""
+      echo -e "  ${YELLOW}⚠${NC}  Add this to your shell profile so \`zeph\` is on PATH:"
+      echo "      export PATH=\"\$HOME/.local/bin:\$PATH\""
+    fi
+  else
+    fail "Install failed"
+    echo "  If you saw an EACCES permission error, your global prefix isn't user-writable."
+    echo "  Safe options (do NOT use sudo npm — it runs install scripts as root):"
+    echo "    1. Use nvm:  https://github.com/nvm-sh/nvm"
+    echo "    2. Re-run with: npm config set prefix ~/.local && bash install.sh"
+    exit 1
+  fi
 else
-  echo "  [dry-run] npm install -g @zeph-to/mcp-server@latest @zeph-to/hook-sdk@latest"
+  echo "  [dry-run] npm install -g $PREFIX_FLAG @zeph-to/mcp-server@latest @zeph-to/hook-sdk@latest"
 fi
 
 # Claude Code
@@ -332,7 +367,7 @@ if os.path.exists(f):
     try: d = json.load(open(f))
     except: pass
 d.setdefault('hooks', {})
-d['hooks']['AfterAgent'] = [{'matcher': '*', 'hooks': [{'name': 'zeph-notify', 'type': 'command', 'command': 'zeph notify --title \"Task done\" 2>/dev/null || true'}]}]
+d['hooks']['AfterAgent'] = [{'matcher': '*', 'hooks': [{'name': 'zeph-notify', 'type': 'command', 'command': '\$(command -v zeph || echo \"npx -y @zeph-to/hook-sdk\") notify --title \"Task done\" 2>/dev/null || true'}]}]
 d['hooksConfig'] = {'enabled': True}
 os.makedirs(os.path.dirname(f), exist_ok=True)
 json.dump(d, open(f, 'w'), indent=2)
@@ -353,7 +388,7 @@ if [ $HAS_CURSOR -eq 1 ] && should_install "cursor"; then
 {
   "version": 1,
   "hooks": {
-    "stop": [{ "command": "zeph notify --title \"Task done\" 2>/dev/null || true" }]
+    "stop": [{ "command": "$(command -v zeph || echo \"npx -y @zeph-to/hook-sdk\") notify --title \"Task done\" 2>/dev/null || true" }]
   }
 }
 CURSOR_HOOKS
@@ -373,7 +408,7 @@ if [ $HAS_WINDSURF -eq 1 ] && should_install "windsurf"; then
     cat > "$HOME/.codeium/windsurf/hooks.json" <<'WINDSURF_HOOKS'
 {
   "hooks": {
-    "post_cascade_response": [{ "command": "zeph notify --title \"Task done\" 2>/dev/null || true", "show_output": false }]
+    "post_cascade_response": [{ "command": "$(command -v zeph || echo \"npx -y @zeph-to/hook-sdk\") notify --title \"Task done\" 2>/dev/null || true", "show_output": false }]
   }
 }
 WINDSURF_HOOKS
@@ -399,7 +434,7 @@ if [ $HAS_CODEX -eq 1 ] && should_install "codex"; then
 {
   "version": 1,
   "hooks": {
-    "Stop": [{ "type": "command", "bash": "zeph notify --title \"Task done\" 2>/dev/null || true" }]
+    "Stop": [{ "type": "command", "bash": "$(command -v zeph || echo \"npx -y @zeph-to/hook-sdk\") notify --title \"Task done\" 2>/dev/null || true" }]
   }
 }
 CODEX_HOOKS
@@ -419,7 +454,7 @@ if [ $HAS_COPILOT -eq 1 ] && should_install "copilot"; then
 {
   "version": 1,
   "hooks": {
-    "sessionEnd": [{ "type": "command", "bash": "zeph notify --title \"Task done\" 2>/dev/null || true", "timeoutSec": 10 }]
+    "sessionEnd": [{ "type": "command", "bash": "$(command -v zeph || echo \"npx -y @zeph-to/hook-sdk\") notify --title \"Task done\" 2>/dev/null || true", "timeoutSec": 10 }]
   }
 }
 COPILOT_HOOKS
@@ -443,23 +478,34 @@ if [ $SKIP_CONFIG -eq 0 ] && [ $DRY -eq 0 ]; then
   CURRENT_KEY="${ZEPH_API_KEY:-}"
   CURRENT_HOOK="${ZEPH_HOOK_ID:-}"
 
+  # When invoked via `curl … | bash`, stdin is the pipe — read from the
+  # controlling terminal directly so prompts actually work.
+  if [ -r /dev/tty ]; then
+    READ_FROM="/dev/tty"
+  else
+    READ_FROM=""
+    echo ""
+    echo -e "  ${YELLOW}⚠${NC}  No TTY available — skipping interactive prompts."
+    echo "  Set ZEPH_API_KEY (and optionally ZEPH_HOOK_ID) in your shell, then re-run."
+  fi
+
   if [ -n "$CURRENT_KEY" ]; then
     echo "  ZEPH_API_KEY already set: ${CURRENT_KEY:0:10}..."
-  else
+  elif [ -n "$READ_FROM" ]; then
     echo "  Get your API key from Zeph → Settings → API Keys (MCP preset)"
     echo -n "  Enter ZEPH_API_KEY: "
-    read -r NEW_KEY
+    read -r NEW_KEY < "$READ_FROM"
     if [ -n "$NEW_KEY" ]; then
       CURRENT_KEY="$NEW_KEY"
     fi
   fi
 
-  if [ -n "$CURRENT_KEY" ] && [ -z "$CURRENT_HOOK" ]; then
+  if [ -n "$CURRENT_KEY" ] && [ -z "$CURRENT_HOOK" ] && [ -n "$READ_FROM" ]; then
     echo ""
-    echo "  Optional: For interactive prompts (zeph_prompt/zeph_input),"
+    echo "  Optional: For remote two-way control (zeph_ask/zeph_prompt/zeph_input),"
     echo "  create a Hook at Settings → Developer → Hooks"
     echo -n "  Enter ZEPH_HOOK_ID (or press Enter to skip): "
-    read -r NEW_HOOK
+    read -r NEW_HOOK < "$READ_FROM"
     if [ -n "$NEW_HOOK" ]; then
       CURRENT_HOOK="$NEW_HOOK"
     fi
