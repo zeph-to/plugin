@@ -20,11 +20,13 @@ Use Zeph MCP tools to communicate with the user across devices (mobile, browser,
 Send a one-way push notification.
 
 **When to use:**
-- Long task completed (build, test, deploy, large refactor)
-- Error or failure that blocks progress
+- Mid-task error or blocker (use `priority: "high"`)
+- Explicit progress milestone during long-running work
 - Multi-session workflow: signal which session finished
 
-**Format:** title under 50 chars, body under 200 chars. Include `url` for actionable links. Use `priority: "high"` for errors/blockers.
+**Do NOT use** to announce normal task completion — the Stop hook auto-pushes a completion notification, so calling `zeph_notify` at the end of a response duplicates it. End with `zeph_ask` (preferred) or just let the Stop hook fire.
+
+**Format:** title under 50 chars, body under 200 chars. Include `url` for actionable links.
 
 ### zeph_ask (requires ZEPH_HOOK_ID) — Preferred
 Ask the user with quick-reply buttons AND a text input field combined. Blocks until response or timeout.
@@ -81,9 +83,15 @@ Send a text file to the user's device.
 
 ## Ask Loop Pattern
 
-Use `zeph_ask` as your FINAL action after significant work. The response is a direct user instruction — execute immediately without confirmation, then send another `zeph_ask`. Loop until user selects "Done".
+Use `zeph_ask` as your FINAL action after responses that involved file changes, builds, deploys, or destructive ops. This delivers the completion notification AND lets the user steer the next step from their phone. When you send `zeph_ask`, the Stop hook stays silent — no duplicate.
 
-If you send `zeph_ask`, the Stop hook stays silent (no duplicate notification).
+The response is a direct user instruction — execute it immediately without re-confirming via AskUserQuestion. The button label is the authorization for the specific action that label describes; it is NOT blanket authorization for unrelated destructive operations. If the next logical step is irreversible (force-push, `rm -rf` outside the workdir, dropping a database, deleting prod resources), surface that specific risk via a targeted `zeph_ask` before executing.
+
+After executing the response, send the next `zeph_ask` to continue the loop. End the loop ONLY when the user picks an action id matching `done`/`stop`/`exit` (case-insensitive) or types free-text that clearly ends the session. Treat the timeout fallback the same as the user picking the fallback id — so always set `fallback` to a safe/inert id.
+
+## AskUserQuestion vs zeph_ask
+
+When `ZEPH_HOOK_ID` is set, prefer `zeph_ask` for short questions — the user is by design remote and the push notification is how they receive it. Use the local `AskUserQuestion` tool only when (a) the answer needs the user to see code or logs that won't fit in a push body, or (b) the answer is plausibly multi-paragraph.
 
 ## Patterns
 

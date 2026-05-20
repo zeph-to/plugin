@@ -8,11 +8,13 @@ Use Zeph MCP tools to communicate with the user across devices (mobile, browser,
 Send a one-way push notification.
 
 **When to use:**
-- Long task completed (build, test, deploy, large refactor)
-- Error or failure that blocks progress
+- Mid-task error or blocker (use `priority: "high"`)
+- Explicit progress milestone during a long-running operation
 - Multi-session workflow: signal which session finished
 
-**Format:** title under 50 chars, body under 200 chars. Include `url` for actionable links. Use `priority: "high"` for errors/blockers.
+**Do NOT use** to announce normal task completion — the Stop hook handles that automatically, so a manual `zeph_notify` at the end produces a duplicate push.
+
+**Format:** title under 50 chars, body under 200 chars. Include `url` for actionable links.
 
 ### zeph_ask (requires ZEPH_HOOK_ID) — Preferred
 Ask the user with quick-reply buttons AND a text input field combined. Blocks until response or timeout.
@@ -59,6 +61,8 @@ When muted, do not call any zeph MCP tools.
 
 ## Automatic Behavior
 
-After completing a task that took significant effort (multiple tool calls, file changes, or long analysis), automatically send `zeph_notify` with a summary. Do not ask permission — just notify.
+The Stop hook already sends a push notification after every response that did meaningful work (≥2 tool calls), so you do not need to call `zeph_notify` to announce completion.
 
-After completing work, offer next actions via `zeph_ask` (or `zeph_prompt`) if ZEPH_HOOK_ID is available.
+After completing work that involved file changes, builds, deploys, or destructive ops, end with `zeph_ask` offering next actions — this replaces the auto Stop push (no duplicate) and gives the user a way to drive the next step from their phone. Include a `fallback` action id that is safe/inert. The response to `zeph_ask` is a direct user instruction: execute it immediately without re-confirming. See the Ask Loop section in the Zeph skill for the full pattern.
+
+If `ZEPH_HOOK_ID` is not set, two-way tools (`zeph_ask`/`zeph_prompt`/`zeph_input`) are unavailable; only `zeph_notify` works.
