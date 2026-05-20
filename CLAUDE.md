@@ -61,8 +61,18 @@ When muted, do not call any zeph MCP tools.
 
 ## Automatic Behavior
 
-The Stop hook already sends a push notification after every response that did meaningful work (≥2 tool calls), so you do not need to call `zeph_notify` to announce completion.
+The Stop hook auto-pushes a completion notification after every response that did meaningful work (≥2 tool calls). You do not need to call `zeph_notify` for completion.
 
-After completing work that involved file changes, builds, deploys, or destructive ops, end with `zeph_ask` offering next actions — this replaces the auto Stop push (no duplicate) and gives the user a way to drive the next step from their phone. Include a `fallback` action id that is safe/inert. The response to `zeph_ask` is a direct user instruction: execute it immediately without re-confirming. See the Ask Loop section in the Zeph skill for the full pattern.
+**`zeph_ask` is mandatory only when you ask a question.** If your reply asks the user anything that needs their input — confirmation, choice, yes/no, clarification — the FINAL tool call MUST be `zeph_ask`. Plain-text questions are invisible to a user on their phone. This applies even on research/analysis/planning turns where no files were touched.
+
+**`zeph_ask` is the DEFAULT end of a response after substantial work** (file changes, commits, builds, deploys, destructive ops, milestone completions). Skip it only for clearly trivial responses (read-only exploration, mid-step inside an explicit plan, single-line trivial fixes). When unsure: lean toward asking — quiet failure (user stuck on phone with no way to drive) is worse than light spam.
+
+**Chaining is governed by a sticky REMOTE mode.** The Ask Loop has two states — REMOTE and NORMAL — detected by scanning the conversation, not just the latest message.
+
+- **REMOTE** is entered the first time a `zeph_ask` you sent receives a non-exit response (button tap or non-ending text). Once in REMOTE, end EVERY response with `zeph_ask` — independent of whether the next user message arrives as a `tool_result` or as a typed terminal message, and independent of whether the work was substantial or routine. Sticky REMOTE keeps the channel driveable when the user switches between phone and terminal mid-session.
+- **NORMAL** is the initial state and the state you return to after an exit signal. In NORMAL, apply Rule 3a (substantial work → ask, routine work → skip).
+- **Exit signals**: action id matching `done`/`stop`/`exit` (case-insensitive), ending free-text ("thanks, that's it"), or timeout fallback to a Done-like id. Flip to NORMAL immediately; don't send `zeph_ask` on the response that processes the exit.
+
+The response to `zeph_ask` is a direct user instruction: execute it immediately without re-confirming. See the Ask Loop section in the Zeph skill for the full pattern.
 
 If `ZEPH_HOOK_ID` is not set, two-way tools (`zeph_ask`/`zeph_prompt`/`zeph_input`) are unavailable; only `zeph_notify` works.

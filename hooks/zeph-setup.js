@@ -67,17 +67,55 @@ Mode: ${mode}
    long-running progress milestones, or multi-session signals ("session A
    finished, session B still building"). Set \`priority: "high"\` for blockers.
 
-## The Ask Loop (core remote-control pattern)
+## When zeph_ask is MANDATORY
 
-3. After any response that involved file changes, builds, deploys, or
-   destructive ops, end with a \`zeph_ask\` offering next actions. This both
-   delivers the completion notification AND lets the user steer the next step
-   from their phone. When you send \`zeph_ask\`, the Stop hook stays silent —
-   no duplicate.
+3. **NEVER end a response with a plain-text question.** If your reply
+   asks the user anything that needs their input — confirmation, choice,
+   yes/no, clarification, "Apply this?", "Proceed?", "Which option?" —
+   the FINAL tool call MUST be \`zeph_ask\`. A "?" written in your reply
+   is invisible to a user on their phone. This applies even on research
+   / analysis / planning turns where no files were touched.
+
+   Anti-pattern (wrong):
+   \`\`\`
+   "...build/commit on hold. Apply A?"
+   \`\`\`
+   Correct:
+   \`\`\`
+   zeph_ask({
+     title: "Apply solution A?",
+     body: "<short context comparing options>",
+     actions: [
+       { id: "apply_a", label: "Apply A" },
+       { id: "apply_b", label: "Apply B" },
+       { id: "cancel",  label: "Cancel" }
+     ],
+     placeholder: "or describe a different approach...",
+     fallback: "cancel"
+   })
+   \`\`\`
+
+## When zeph_ask is the DEFAULT (substantial work)
+
+3a. After substantial work, \`zeph_ask\` is the DEFAULT end of the
+    response — not optional. "Substantial" means: file changes, commits,
+    builds, tests, deploys, destructive ops, milestone completions, or
+    anything the user might reasonably want to confirm or redirect.
+
+    SKIP \`zeph_ask\` only when the response is clearly trivial:
+    - Read-only exploration ("let me check this file") with no decision
+      output.
+    - Mid-step inside a clearly-defined plan the user already approved
+      ("step 3 of 5, no decisions involved here").
+    - Trivial change (typo fix, single-line tweak) that needs no ack.
+
+    When unsure: LEAN TOWARD ASKING. Quiet failure (no ask, user stuck
+    on phone with no way to drive) is worse than light spam.
 4. Prefer \`zeph_ask\` over \`zeph_prompt\`/\`zeph_input\` — it combines buttons
    and free-text in one push. Always include a \`fallback\` action id; the
    fallback must be safe/inert (\`done\`, \`wait\`, \`review\`), never destructive.
-5. Example final action:
+5. Example \`zeph_ask\` shape — use sparingly per Rule 3a (only at natural
+   pause points; NOT after every response — see Rule 8):
    \`\`\`
    zeph_ask({
      title: "Done. Next?",
@@ -102,11 +140,47 @@ Mode: ${mode}
    database, deleting prod resources), surface that specific risk via a
    targeted \`zeph_ask\` before executing — e.g., title "About to force-push
    main — proceed?", actions \`[ok, cancel]\`, fallback \`cancel\`.
-8. After executing the response, send the next \`zeph_ask\` to continue the
-   loop. End the loop ONLY when the user picks an action id matching
-   \`done\`/\`stop\`/\`exit\` (case-insensitive) or types free-text that clearly
-   ends the session (e.g., "thanks, that's it"). Treat the timeout fallback
-   the same as the user picking the fallback id.
+8. **Chaining is governed by a sticky REMOTE mode.** The Ask Loop has
+   two states — REMOTE and NORMAL — and you detect the current state by
+   scanning the conversation, not just the most recent message.
+
+   ### Detecting state
+   Scan the conversation in reverse, looking for whichever appears
+   first (most recent):
+   - (a) A \`tool_result\` for a \`zeph_ask\` you sent where the action id
+         is NOT in \`{done, stop, exit}\` (case-insensitive) and the
+         free-text response is NOT a clear session-ending phrase like
+         "thanks, that's it" / "all good, done".
+   - (b) An exit signal: action id in \`{done, stop, exit}\`, ending
+         free-text, or a timeout fallback that resolved to a Done-like
+         fallback id.
+   - (c) No \`zeph_ask\` history at all.
+
+   If the first hit is (a) → you are in REMOTE.
+   If the first hit is (b) or (c) → you are in NORMAL.
+
+   ### Behavior in REMOTE (sticky, zeph_ask MANDATORY)
+   End EVERY response with \`zeph_ask\`. This is non-negotiable while in
+   REMOTE — independent of:
+   - Whether the next user message arrived as a \`tool_result\` or as a
+     typed terminal message. The user may switch devices mid-session;
+     sticky REMOTE keeps the channel driveable from either side.
+   - Whether the work was substantial or routine.
+
+   The only way to leave REMOTE is the user signalling exit (per the
+   (b) list above).
+
+   ### Behavior in NORMAL (apply Rule 3a)
+   - Substantial work → end with \`zeph_ask\`.
+   - Routine work → skip \`zeph_ask\`, let the Stop hook fire.
+   - Rule 3 (questions → zeph_ask) is still mandatory regardless.
+
+   ### Exiting REMOTE
+   The moment the user picks an action id matching
+   \`done\`/\`stop\`/\`exit\` (case-insensitive), types free-text that
+   clearly ends the session, or the zeph_ask times out and falls back
+   to a Done-like id, you flip to NORMAL. Don't send \`zeph_ask\` on the
+   response that processes the exit signal.
 
 ## When to use AskUserQuestion vs zeph_ask
 
