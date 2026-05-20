@@ -19,6 +19,23 @@ if [ -z "$TRANSCRIPT" ] || [ ! -f "$TRANSCRIPT" ]; then
     exit 0
 fi
 
+# Claude Code invokes the Stop hook for every Claude-CLI-driven session that
+# terminates — not just the main interactive turn. That includes:
+#   - Sub-agents spawned via the Task tool. Their transcripts live under
+#     <project>/<session-uuid>/subagents/agent-<id>.jsonl. They typically
+#     run many internal tool calls, so they always pass the >=2 gate and
+#     fire a spurious push at the end of an interactive turn that used
+#     Task at all.
+#   - Background observer sessions (e.g. claude-mem) that record memory
+#     by spinning up their own short Claude sessions. Their transcripts
+#     have project-hash paths like `-Users-.--claude-mem-observer-sessions/`
+#     and fire constantly, producing pushes when the user is doing nothing.
+# Skip both — we only want the *main* interactive turn ending.
+case "$TRANSCRIPT" in
+    */subagents/*) exit 0 ;;
+    *observer*)    exit 0 ;;
+esac
+
 # Scope all checks to "entries since the last *real* user message" — Claude
 # Code logs tool_results as synthetic user messages, so a naive
 # role=="user" filter would slice mid-turn. A real user turn is a user
