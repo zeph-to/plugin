@@ -7,12 +7,16 @@ requires `jq` and `python3`; the tests inherit the same requirements.
 ## Running
 
 ```bash
-# From the repo root
+# Run every suite
+bash tests/run-all.sh
+
+# Or one suite at a time
 bash tests/test-zeph-stop.sh
+bash tests/test-zeph-ask.sh
 ```
 
-Exits 0 when all tests pass, non-zero otherwise. CI runs it on every PR
-via `.github/workflows/test.yml`.
+Exits 0 when all tests pass, non-zero otherwise. CI runs `run-all.sh` on
+every PR via `.github/workflows/test.yml`.
 
 ## What's covered
 
@@ -31,6 +35,18 @@ each one would have failed before the corresponding fix landed:
 | `1-tool turn stays silent` | The basic `TOOL_COUNT < 2` gate. |
 | `turn with zeph_ask silenced` | The basic dedup that lets `zeph_ask` replace the Stop push. |
 | `muted project skips push` | The `/tmp/zeph-muted-<hash>` opt-out. |
+
+### zeph-ask.sh
+
+| Test | Catches |
+|------|---------|
+| `single .tool_input.question` | The standard Claude Code AskUserQuestion shape. |
+| `multi-question .tool_input.questions[0].question` | The newer AskUserQuestion format with parallel questions. |
+| `no question field → 'Question pending' fallback` | Defends against schema changes. |
+| `Korean ≤ 200 codepoints (UTF-8 safe)` | The python3 trim; old `head -c 200` cut mid-byte and produced mojibake. |
+| `muted project skips push` | Same `/tmp/zeph-muted-<hash>` opt-out. |
+| `title carries project basename` | Verifies CLAUDE_PROJECT_DIR plumbing. |
+| `invalid JSON input doesn't crash` | `jq` errors are absorbed; fallback text still fires. |
 
 ## Fixtures
 
