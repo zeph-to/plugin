@@ -23,10 +23,19 @@ fi
 # Code logs tool_results as synthetic user messages, so a naive
 # role=="user" filter would slice mid-turn. A real user turn is a user
 # message whose content carries a text block.
+#
+# Defensive note: some transcript entries (system prompts, certain meta
+# events) carry a STRING content instead of the usual array of content
+# blocks. Calling `map(.type)` on a string crashes the whole jq pipeline
+# with "Cannot iterate over string", which silently fails the Stop hook.
+# Every place we touch .content is now guarded with `type == "array"`.
 JQ_SINCE_USER='
+def content_blocks:
+    .message?.content as $c
+    | if ($c | type) == "array" then $c else [] end;
 def is_real_user:
     .message?.role == "user"
-    and ((.message?.content // []) | map(.type) | index("text") != null);
+    and (content_blocks | map(.type) | index("text") != null);
 def since_last_user:
     . as $all
     | ($all | map(is_real_user) | reverse | index(true)) as $rev
@@ -39,8 +48,7 @@ def since_last_user:
 TOOL_COUNT=$(jq -rs "$JQ_SINCE_USER"'
     since_last_user
     | [.[]
-       | .message?
-       | (.content // [])[]?
+       | content_blocks[]
        | select(.type == "tool_use")]
     | length
 ' "$TRANSCRIPT" 2>/dev/null)
@@ -55,8 +63,7 @@ fi
 ALREADY_ASKED=$(jq -rs "$JQ_SINCE_USER"'
     since_last_user
     | [.[]
-       | .message?
-       | (.content // [])[]?
+       | content_blocks[]
        | select(.type == "tool_use")
        | .name // ""
        | select(. == "zeph_ask" or . == "zeph_prompt")]
@@ -76,7 +83,7 @@ SUMMARY=$(jq -rs "$JQ_SINCE_USER"'
     since_last_user
     | [.[]
        | select(.message?.role == "assistant")
-       | (.message?.content // [])
+       | content_blocks
        | map(select(.type == "text") | .text)
        | join(" ")
        | select(. != "")]
