@@ -1,47 +1,148 @@
 #!/usr/bin/env node
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
+// SessionStart hook — injects Zeph remote-control rules into the session.
+// Emits JSON with hookSpecificOutput.additionalContext so the rules land in
+// Claude's context, not just the user's transcript.
 
-// Load API key: env var → config file
-const configFile = path.join(process.env.HOME || '~', '.zeph', 'config.json');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { execSync } = require('child_process');
+
+const configFile = path.join(os.homedir(), '.zeph', 'config.json');
 let config = {};
 try { config = JSON.parse(fs.readFileSync(configFile, 'utf-8')); } catch {}
 
-const envOr = (key) => { const v = process.env[key]; return v && !v.startsWith('${') ? v : undefined; };
+const envOr = (key) => {
+    const v = process.env[key];
+    if (!v) return undefined;
+    if (v.startsWith('${')) return undefined; // unresolved ${VAR} placeholder
+    if (v.length === 0) return undefined;
+    return v;
+};
+
 const apiKey = envOr('ZEPH_API_KEY') || config.apiKey;
 const hookId = envOr('ZEPH_HOOK_ID') || config.hookId;
 
+const hasJq = (() => {
+    try { execSync('command -v jq', { stdio: 'pipe' }); return true; } catch { return false; }
+})();
+
+const emit = (additionalContext) => {
+    process.stdout.write(JSON.stringify({
+        hookSpecificOutput: {
+            hookEventName: 'SessionStart',
+            additionalContext,
+        },
+    }));
+};
+
 if (!apiKey) {
-  process.stdout.write('Zeph: not configured. Run "npx @zeph-to/hook-sdk setup" to set up API key and start receiving notifications.');
-  process.exit(0);
+    emit(
+        '# System note (Zeph plugin — internal, do not surface unless asked)\n\n' +
+        'Zeph is installed but not configured. The user can run ' +
+        '`npx @zeph-to/hook-sdk setup` to enable cross-device notifications and remote control. ' +
+        'Until configured, do NOT call any zeph_* MCP tools.'
+    );
+    process.exit(0);
 }
 
-const { execSync } = require('child_process');
-const hasJq = (() => { try { execSync('command -v jq', { stdio: 'pipe' }); return true; } catch { return false; } })();
+const mode = hookId ? 'two-way (notify + ask + prompt + input)' : 'one-way (notify only)';
 
-const mode = hookId ? 'notify + ask + prompt + input' : 'notify only';
+const rulesTwoWay = `# Zeph — Remote-Control Rules (active every response)
 
-const rules = `ZEPH NOTIFICATION ACTIVE — mode: ${mode}
+Zeph lets the user drive this Claude Code session from their phone. You
+are talking to a user who may not be at the terminal. Buttons sent via
+\`zeph_ask\` are how they steer you.
 
-## Rules
+Mode: ${mode}
 
-1. Do NOT call zeph_notify — a Stop hook already sends automatic push notifications on every response. Calling zeph_notify causes duplicate pushes.
-2. Use priority "high" for errors or failures.
-${hookId ? `3. PREFER zeph_ask for ANY question to the user — it shows buttons AND a text input field together. The user is on their phone and can only respond via push notifications. ALWAYS include a fallback action ID so timeout auto-selects a safe default.
-4. Use zeph_prompt for simple yes/no choices, zeph_input for text-only input. But zeph_ask covers both cases — prefer it.
-5. MUST use zeph_ask as your FINAL action before ending any response that involved file changes, builds, deploys, or 2+ tool calls. This replaces the automatic Stop notification — if you send zeph_ask, the Stop hook stays silent. Example: title: "Done. Next?", actions: [{id:"continue",label:"Continue"},{id:"review",label:"Review"},{id:"done",label:"Done"}], placeholder: "or type a command...", fallback: "done".
-6. When zeph_ask returns a response — treat it as a DIRECT USER INSTRUCTION. Do NOT ask for confirmation. Execute immediately. After execution, send another zeph_ask with "Done. Next?" to continue the loop. Only stop the loop when the user selects "done" or equivalent.
-7. Only use AskUserQuestion when the question requires sharing code/logs that cannot fit in a push notification body.
-8. If zeph_ask times out and no fallback was set, proceed with the safest default action. Do NOT re-ask via AskUserQuestion.` : '3. zeph_notify is available if you need to send a manual notification with a specific URL or custom message.'}
+## Notification discipline
 
-## Persistence
+1. A Stop hook already sends an automatic push on every response that did real
+   work (≥2 tool calls). Do NOT call \`zeph_notify\` just to say "done" — it
+   duplicates the auto-push.
+2. Use \`zeph_notify\` only for: mid-task errors that block progress, explicit
+   long-running progress milestones, or multi-session signals ("session A
+   finished, session B still building"). Set \`priority: "high"\` for blockers.
 
-ACTIVE EVERY RESPONSE. Do not forget after many turns. Still active after context compression.`;
+## The Ask Loop (core remote-control pattern)
 
-if (!hasJq) {
-  process.stdout.write(rules + '\n\n⚠️ jq not found — auto-notifications (Stop/Ask hooks) are disabled. Install: brew install jq (macOS) or apt install jq (Linux).');
-} else {
-  process.stdout.write(rules);
-}
+3. After any response that involved file changes, builds, deploys, or
+   destructive ops, end with a \`zeph_ask\` offering next actions. This both
+   delivers the completion notification AND lets the user steer the next step
+   from their phone. When you send \`zeph_ask\`, the Stop hook stays silent —
+   no duplicate.
+4. Prefer \`zeph_ask\` over \`zeph_prompt\`/\`zeph_input\` — it combines buttons
+   and free-text in one push. Always include a \`fallback\` action id; the
+   fallback must be safe/inert (\`done\`, \`wait\`, \`review\`), never destructive.
+5. Example final action:
+   \`\`\`
+   zeph_ask({
+     title: "Done. Next?",
+     actions: [
+       { id: "continue", label: "Continue" },
+       { id: "review",   label: "Review"   },
+       { id: "done",     label: "Done"     }
+     ],
+     placeholder: "or type a command...",
+     fallback: "done"
+   })
+   \`\`\`
+
+## Handling the response
+
+6. A \`zeph_ask\` response IS a direct user instruction. Execute it
+   immediately — do NOT re-ask via AskUserQuestion to confirm. The button
+   label is the authorization for the specific action that label describes.
+7. Important caveat: a generic button like "Continue" authorizes the next
+   logical step, NOT arbitrary destruction. If the next logical step is
+   irreversible (force-push, \`rm -rf\` outside the workdir, dropping a
+   database, deleting prod resources), surface that specific risk via a
+   targeted \`zeph_ask\` before executing — e.g., title "About to force-push
+   main — proceed?", actions \`[ok, cancel]\`, fallback \`cancel\`.
+8. After executing the response, send the next \`zeph_ask\` to continue the
+   loop. End the loop ONLY when the user picks an action id matching
+   \`done\`/\`stop\`/\`exit\` (case-insensitive) or types free-text that clearly
+   ends the session (e.g., "thanks, that's it"). Treat the timeout fallback
+   the same as the user picking the fallback id.
+
+## When to use AskUserQuestion vs zeph_ask
+
+9. Prefer \`zeph_ask\` for short remote-friendly questions. Use the local
+   AskUserQuestion tool only when (a) the answer needs the user to see code
+   or logs that won't fit in a push body, or (b) the answer is plausibly
+   multi-paragraph. \`zeph_ask\` should be the default while a hookId is set.
+
+## Mute / persistence
+
+10. If the user ran \`/zeph-mute\` for this project, the Stop and Ask hooks
+    stay silent (driven by a tmp marker file). MCP tools still work but
+    don't call them unless the user explicitly asks. \`/zeph-unmute\` lifts it.
+11. These rules persist for the entire session. They remain active after
+    context compaction — do not "forget" them after many turns.`;
+
+const rulesOneWay = `# Zeph — Notification Rules (active every response)
+
+Mode: ${mode} — \`ZEPH_HOOK_ID\` is not set, so two-way (\`zeph_ask\` /
+\`zeph_prompt\` / \`zeph_input\`) is unavailable. Only \`zeph_notify\` works.
+
+1. A Stop hook auto-notifies after responses with real work (≥2 tool calls).
+   Do NOT call \`zeph_notify\` just to say "done" — it duplicates the auto-push.
+2. Use \`zeph_notify\` only for: mid-task errors that block progress, explicit
+   long-running progress milestones, or multi-session signals. Set
+   \`priority: "high"\` for blockers.
+3. To enable remote control (buttons + free-text from the phone), the user
+   should set \`ZEPH_HOOK_ID\` via \`npx @zeph-to/hook-sdk setup\`. You may
+   mention this once if relevant — don't repeat it.
+4. These rules persist for the entire session, including after context
+   compaction.`;
+
+const rules = hookId ? rulesTwoWay : rulesOneWay;
+
+const finalContext = hasJq
+    ? rules
+    : rules + '\n\n## Environment note\n\n`jq` is not installed on this machine, so the Stop and Ask shell hooks exit early without sending pushes. Tell the user once: install with `brew install jq` (macOS) or `apt install jq` (Linux).';
+
+emit(finalContext);
