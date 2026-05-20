@@ -69,11 +69,15 @@ Claude가 유저에게 질문 (AskUserQuestion tool 호출)
 ```
 세션 시작
   → ZEPH_API_KEY 확인
-  → 없으면 설정 안내 메시지 출력
-  → 있으면 행동 규칙 주입 (MCP tool 사용 가이드)
+  → 없으면: hookSpecificOutput.additionalContext에 안내 메시지 (내부 노트)
+  → 있으면: 원격 제어 룰 (remote-control rules) 주입
+      ├─ ZEPH_HOOK_ID 있으면: 양방향 (notify + ask + prompt + input)
+      └─ 없으면: 단방향 (notify only)
 ```
 
-**참고:** 행동 규칙 주입은 AI의 tool 호출을 "권장"하지만 강제하지 않음.
+**중요:** 출력은 `{"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "..."}}` JSON 포맷. plain text stdout은 사용자 transcript에만 보이고 모델 컨텍스트에는 안 들어감 — 룰이 실제 작동하려면 JSON 출력 필수.
+
+**참고:** 룰은 권장 사항이지만, Stop hook 자동 알림과 짝지어 설계되어 있어 모델이 룰을 따르지 않더라도 알림 자체는 누락되지 않음.
 
 ## MCP Server Tools 상세
 
@@ -134,12 +138,10 @@ zeph notify --title "dev test"
 → **Plugin 설치만 하면 됨.** AskUserQuestion hook이 자동 알림.
 → 단, 답변은 터미널에서 해야 함.
 
-### 3. 모바일에서 직접 답변하고 싶다
-→ 세션 시작 시 프롬프트:
-```
-나한테 물어볼 거 있으면 zeph_ask 써. 끝나면 zeph_notify로 알려줘.
-```
-→ ZEPH_HOOK_ID 필요.
+### 3. 모바일에서 직접 답변/지시하고 싶다 (원격 제어)
+→ `ZEPH_HOOK_ID` 설정만 하면 됨. SessionStart 훅이 자동으로 양방향 룰을 주입.
+→ 별도 프롬프트 불필요. 모델이 작업 종료 시 `zeph_ask`로 다음 액션 버튼+자유 입력을 보내고, 폰 응답을 직접 명령으로 해석해 즉시 실행 (Ask Loop).
+→ `done`/`stop`/`exit` 응답 또는 타임아웃 fallback으로 루프 종료.
 
 ### 4. CI/CD나 스크립트에서 알림 보내고 싶다
 → **CLI만 사용:**

@@ -147,9 +147,11 @@ Saves to `~/.zeph/config.json`. All Zeph tools (CLI, MCP server, plugin hooks) r
 - **Node.js** (required) — for MCP server and CLI
 - **jq** (recommended) — for auto-notifications (Stop/Ask hooks). Without jq, hooks are disabled silently. A warning is shown at session start. Install: `brew install jq` (macOS) or `apt install jq` (Linux)
 
-### E2E Encryption
+### Encryption
 
-Push notifications are encrypted end-to-end by default using AES-256-GCM + ECDH P-256. Keys are synced with the server on first run. Toggle encryption in the Zeph app (Settings → Encryption). When disabled, the MCP server and CLI send plaintext.
+Push bodies are encrypted with AES-256-GCM. The wrapping key is derived via ECDH P-256 and synced across your own devices on first run so all your devices can read the same push. Toggle encryption in the Zeph app (Settings → Encryption); when disabled, the MCP server and CLI send plaintext.
+
+**Threat model honesty:** keys are persisted on the Zeph backend to enable cross-device sync, so this is *device-shared* encryption — it protects push contents from passive network observers and from a leaked database snapshot taken without the key store, but it does **not** protect against the Zeph backend itself (it has the keys it serves to your devices). A true E2E mode (per-device keypairs, server stores only public keys, no key escrow) is on the roadmap. Until then, treat push bodies as sensitive-but-not-secret.
 
 ## Other Agents
 
