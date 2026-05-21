@@ -149,7 +149,7 @@ zeph notify --title "dev test"
 zeph notify --key ak_... --title "Deploy 완료"
 ```
 
-### 5. 다른 AI 에이전트 (Cursor, Gemini)에서 쓰고 싶다
-→ **Skills guide:** `npm exec -y -- skills add zeph-to/plugin`
-→ **Full setup (MCP + hooks):** `install.sh` 실행.
-→ Auto hooks는 Claude Code only.
+### 5. 다른 AI 에이전트 (Cursor, Windsurf, Gemini, Codex, Copilot, Cline, Aider)에서 쓰고 싶다
+→ **`npx @zeph-to/hook-sdk install` 한 번이면 됨.** 설치된 에이전트를 감지해서 각각 MCP 서버 + 알림 훅 + 행동 룰 파일(각 에이전트의 native always-on 위치)을 설정.
+→ 행동 룰(zeph_ask 사용법, sticky REMOTE 등)은 7개 에이전트 모두 동일하게 적용됨 — hook-sdk의 templates.ts 공통 코어에서 생성.
+→ Claude Code는 plugin이 SessionStart 훅으로 룰 주입, 나머지는 native 룰 파일.

@@ -1,6 +1,6 @@
 {
   "name": "zeph",
-  "version": "0.5.3",
+  "version": "0.5.7",
   "description": "AI agent notifications via Zeph — notify, prompt, input across devices",
   "author": {
     "name": "zeph-to",

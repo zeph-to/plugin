@@ -83,11 +83,36 @@ Send a text file to the user's device.
 
 ## Ask Loop Pattern
 
-Use `zeph_ask` as your FINAL action after responses that involved file changes, builds, deploys, or destructive ops. This delivers the completion notification AND lets the user steer the next step from their phone. When you send `zeph_ask`, the Stop hook stays silent — no duplicate.
+### `zeph_ask` is MANDATORY for questions
+
+If your reply asks the user anything that needs their input — confirmation, choice, yes/no, clarification, "Apply this?", "Proceed?", "Which option?" — the FINAL tool call MUST be `zeph_ask`. A "?" written in your reply is invisible to a user on their phone. Applies even on research / analysis / planning turns where no files were touched.
+
+### `zeph_ask` is the DEFAULT after substantial work
+
+After file changes, commits, builds, tests, deploys, destructive ops, or milestone completions, end with `zeph_ask`. Skip ONLY for clearly trivial responses:
+- Read-only exploration with no decision output
+- Mid-step inside an explicit plan the user already approved
+- Trivial single-line fixes that need no acknowledgment
+
+When unsure: lean toward asking. Quiet failure (user stuck on phone with no way to drive) is worse than light spam.
+
+### Handling the response
 
 The response is a direct user instruction — execute it immediately without re-confirming via AskUserQuestion. The button label is the authorization for the specific action that label describes; it is NOT blanket authorization for unrelated destructive operations. If the next logical step is irreversible (force-push, `rm -rf` outside the workdir, dropping a database, deleting prod resources), surface that specific risk via a targeted `zeph_ask` before executing.
 
-After executing the response, send the next `zeph_ask` to continue the loop. End the loop ONLY when the user picks an action id matching `done`/`stop`/`exit` (case-insensitive) or types free-text that clearly ends the session. Treat the timeout fallback the same as the user picking the fallback id — so always set `fallback` to a safe/inert id.
+### Sticky REMOTE mode
+
+The Ask Loop has two states. Detect by scanning the conversation in reverse for whichever appears first:
+
+- **(a) A `tool_result` for a `zeph_ask` you sent**, where the action id is NOT in `{done, stop, exit}` and the free-text response is NOT a clear session-ender ("thanks, that's it"). → You are in **REMOTE**.
+- **(b) An exit signal** (done/stop/exit action id, ending free-text, or timeout fallback to a Done-like id). → You are in **NORMAL**.
+- **(c) No `zeph_ask` history at all.** → You are in **NORMAL**.
+
+**REMOTE (sticky, `zeph_ask` MANDATORY)**: end EVERY response with `zeph_ask` — independent of input source (the user may switch between phone and terminal mid-session) and independent of whether the work was substantial or routine. The only way to leave REMOTE is the user exiting explicitly.
+
+**NORMAL**: apply Rule 3a — substantial work → `zeph_ask`, routine work → skip and let the Stop hook fire.
+
+**Exit**: the moment the user picks `done`/`stop`/`exit`, types an ending phrase, or the `zeph_ask` times out to a Done-like fallback, flip to NORMAL. Don't send `zeph_ask` on the response that processes the exit signal. Always set `fallback` to a safe/inert id.
 
 ## AskUserQuestion vs zeph_ask
 

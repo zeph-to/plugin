@@ -1,0 +1,19 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  hooks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install hook runtime deps
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Run hook tests
+        run: bash tests/run-all.sh
