@@ -9,7 +9,7 @@ ESCAPED=$(printf '%s' "$LONG" | python3 -c 'import sys,json; print(json.dumps(sy
 
 cat > "$OUT" <<EOF
 {"type":"system","message":{"role":"system","content":"sys"}}
-{"type":"user","message":{"role":"user","content":[{"type":"text","text":"긴 응답 부탁"}]}}
+{"type":"user","message":{"role":"user","content":"긴 응답 부탁"}}
 {"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"a","name":"Read","input":{}}]}}
 {"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"a","content":"x"}]}}
 {"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"b","name":"Read","input":{}}]}}

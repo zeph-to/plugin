@@ -25,10 +25,12 @@ each one would have failed before the corresponding fix landed:
 
 | Test | Catches |
 |------|---------|
-| `string-content system message doesn't crash jq` | The 0.5.1 hotfix — every real Claude Code transcript starts with a system message whose `.content` is a string, not an array. Earlier `map(.type)` calls crashed on it. |
+| `string-content turn detection` | The 0.5.8 fix — current Claude Code logs typed user messages with `.message.content` as a string. The 0.5.1 crash guard turned strings into `[]`, so `is_real_user` stopped detecting real turns and `since_last_user` silently scoped every check to the whole transcript. |
+| `legacy array-form user message` | `is_real_user` still matches the older array-of-blocks user-message shape (the `or` branch). |
+| `off-by-one — turn-2 push must not leak turn-1 text` | The 0.5.8 fix — with turn detection broken, a Stop hook that fired before the final text flushed produced a push carrying the *previous* turn's answer. |
 | `subagent transcript silenced` | The 0.5.2 hotfix — Claude Code fires the Stop hook for sub-agent terminations too. |
 | `observer transcript silenced` | The 0.5.2 hotfix — claude-mem and other observer-style plugins spin up Claude sessions whose Stop event also fires our hook. |
-| `multi-turn scoping respects the LAST real user turn` | The 0.5.1 jq scoping change. Older grep-based counts leaked across turns. |
+| `multi-turn scoping respects the LAST real user turn` | Per-turn `TOOL_COUNT` must not leak across turns — regresses if string-content turn detection breaks. |
 | `long Korean summary >512B triggers CLI file-upload path` | The 0.5.3 hotfix — earlier 280-char trim collapsed summaries below the CLI's 512-byte threshold, suppressing file attachment. |
 | `empty SUMMARY falls back to default body` | Safety-net that 0.5.3 amend re-added. |
 | `body stays under 15000-byte safety cap` | The 5000-codepoint upper bound, matching 0.4.0 behavior. |
@@ -51,8 +53,10 @@ each one would have failed before the corresponding fix landed:
 ## Fixtures
 
 JSONL transcripts in `fixtures/` match the shape Claude Code writes —
-JSONL, one event per line, `.message.content` either an array of content
-blocks (real interactive turns) or a string (system prompts). The
+one event per line. `.message.content` is a **string** for typed user
+messages and system prompts, and an **array of content blocks** for
+assistant turns and tool results. (`main-array-user-2-tools.jsonl`
+keeps the legacy array-wrapped user-message shape covered.) The
 `gen-long-summary.sh` script regenerates the >512-byte Korean fixture
 deterministically; the long fixture is also checked in so CI doesn't
 need python3 at fixture-generation time (only at test-run time, which it
