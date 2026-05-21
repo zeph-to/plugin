@@ -155,23 +155,23 @@ Push bodies are encrypted with AES-256-GCM. The wrapping key is derived via ECDH
 
 ## Other Agents
 
-### Quick Install (All Agents)
+### One-command setup (all agents)
 
 ```bash
-npm exec -y -- skills add zeph-to/plugin
+npx @zeph-to/hook-sdk install
 ```
 
-Installs Zeph skill guide to any supported agent via the [skills ecosystem](https://github.com/vercel-labs/skills). For MCP + auto-notifications, use `install.sh` below.
+Detects every installed agent (Cursor, Windsurf, Gemini CLI, Codex CLI, Copilot CLI, Cline, Aider) and configures each one — MCP server, notification hooks, and the behavioral rule file in that agent's native always-on location. This is the single supported installer.
 
-### Gemini CLI
+### Manual MCP setup (if you prefer)
+
+**Gemini CLI:**
 
 ```bash
 gemini mcp add zeph -- npx -y @zeph-to/mcp-server
 ```
 
-### Cursor
-
-Add to `~/.cursor/mcp.json`:
+**Cursor** — add to `~/.cursor/mcp.json`:
 
 ```json
 {
@@ -185,17 +185,7 @@ Add to `~/.cursor/mcp.json`:
 }
 ```
 
-### Windsurf
-
-Add to `~/.codeium/windsurf/mcp_config.json` (same format as Cursor).
-
-### Auto-detect all agents
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/zeph-to/plugin/main/install.sh | bash
-```
-
-Detects installed agents and configures each one.
+**Windsurf** — add to `~/.codeium/windsurf/mcp_config.json` (same format as Cursor).
 
 ## CLI Reference
 
@@ -232,20 +222,30 @@ npx @zeph-to/hook-sdk <command>
 | Cline | LLM-based | — | Skills |
 | Aider | LLM-based | — | Skills |
 
-All agents get skill guides via `npm exec -y -- skills add zeph-to/plugin`. For auto-notifications + MCP, use `install.sh`.
+Run `npx @zeph-to/hook-sdk install` to configure every detected agent at once — MCP server, notification hooks, and behavioral rules.
 
 ## Uninstall
+
+**Claude Code:**
 
 ```bash
 claude plugin uninstall zeph@zeph
 rm ~/.zeph/config.json
 ```
 
-Or remove from all agents:
+**Other agents** — remove the files `zeph install` wrote:
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/zeph-to/plugin/main/install.sh | bash -s -- --uninstall
-```
+| Agent | Files to remove |
+|-------|-----------------|
+| Cursor | `~/.cursor/rules/zeph.mdc`, `~/.cursor/hooks.json` (zeph entry), zeph from `~/.cursor/mcp.json` |
+| Windsurf | zeph block from `~/.codeium/windsurf/memories/global_rules.md`, `~/.codeium/windsurf/hooks.json`, zeph from `mcp_config.json` |
+| Gemini CLI | zeph block from `~/.gemini/GEMINI.md`, AfterAgent hook from `~/.gemini/settings.json` |
+| Codex CLI | zeph block from `~/.codex/AGENTS.md`, `~/.codex/hooks.json` |
+| Copilot CLI | `~/.copilot/instructions/zeph.instructions.md`, `~/.copilot/hooks/zeph.json` |
+| Cline | `~/.cline/rules/zeph.md` |
+| Aider | `~/.zeph/aider-conventions.md`, the `read:` line from `~/.aider.conf.yml` |
+
+Shared rule files (Windsurf/Gemini/Codex) keep your own content — only the block between `<!-- ZEPH:START -->` / `<!-- ZEPH:END -->` is Zeph's.
 
 ## License
 
