@@ -226,26 +226,22 @@ Run `npx @zeph-to/hook-sdk install` to configure every detected agent at once �
 
 ## Uninstall
 
-**Claude Code:**
+**All agents at once:**
+
+```bash
+npx @zeph-to/hook-sdk uninstall          # remove Zeph from every detected agent
+npx @zeph-to/hook-sdk uninstall --dry-run  # preview first
+npx @zeph-to/hook-sdk uninstall --purge    # also delete ~/.zeph/config.json
+```
+
+This reverses `zeph install` for every detected agent — removing MCP entries, hooks, and rule files. It only touches Zeph's own artifacts: shared rule files (Windsurf/Gemini/Codex) keep your content, with just the `<!-- ZEPH:START -->` / `<!-- ZEPH:END -->` block stripped. The Claude Code plugin is removed via `claude plugin uninstall zeph@zeph`.
+
+**Claude Code only:**
 
 ```bash
 claude plugin uninstall zeph@zeph
 rm ~/.zeph/config.json
 ```
-
-**Other agents** — remove the files `zeph install` wrote:
-
-| Agent | Files to remove |
-|-------|-----------------|
-| Cursor | `~/.cursor/rules/zeph.mdc`, `~/.cursor/hooks.json` (zeph entry), zeph from `~/.cursor/mcp.json` |
-| Windsurf | zeph block from `~/.codeium/windsurf/memories/global_rules.md`, `~/.codeium/windsurf/hooks.json`, zeph from `mcp_config.json` |
-| Gemini CLI | zeph block from `~/.gemini/GEMINI.md`, AfterAgent hook from `~/.gemini/settings.json` |
-| Codex CLI | zeph block from `~/.codex/AGENTS.md`, `~/.codex/hooks.json` |
-| Copilot CLI | `~/.copilot/instructions/zeph.instructions.md`, `~/.copilot/hooks/zeph.json` |
-| Cline | `~/.cline/rules/zeph.md` |
-| Aider | `~/.zeph/aider-conventions.md`, the `read:` line from `~/.aider.conf.yml` |
-
-Shared rule files (Windsurf/Gemini/Codex) keep your own content — only the block between `<!-- ZEPH:START -->` / `<!-- ZEPH:END -->` is Zeph's.
 
 ## License
 
