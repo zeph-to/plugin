@@ -109,19 +109,42 @@ run_hook "$FIXTURES/main-with-zeph-ask.jsonl"
 assert "stays silent (ALREADY_ASKED > 0)" zeph_silent
 
 echo
-echo "[regression: string-content system message doesn't crash jq]"
-# main-2-tools.jsonl already starts with a string-content system message.
-# If is_real_user crashes on `map(.type)` over a string, TOOL_COUNT comes
-# back empty, the hook exits at the < 2 gate, and we get false silence.
-# So this test piggybacks on the happy path above — if 'fires' passed,
-# the guard works. Document it explicitly here too:
+echo "[regression: string-content turn detection]"
+# Real Claude Code logs typed user messages with .message.content as a
+# STRING (not an array of blocks). is_real_user must still recognise them
+# as turn boundaries — otherwise since_last_user falls back to the whole
+# transcript and every per-turn check breaks. main-2-tools.jsonl uses
+# string-content user messages throughout; this documents the scenario
+# explicitly (the happy path above also exercises it).
 run_hook "$FIXTURES/main-2-tools.jsonl"
-assert "hook survives string content"    zeph_called
+assert "string-content user turn is detected" zeph_called
+assert "summary scoped to this turn"          zeph_body_has "all good"
+
+echo
+echo "[legacy array-form user message — is_real_user 'or' branch]"
+# Older transcripts wrap typed user input in an array carrying a text
+# block. is_real_user must keep matching that shape too.
+run_hook "$FIXTURES/main-array-user-2-tools.jsonl"
+assert "array-form user turn is detected" zeph_called
+assert "summary scoped to this turn"      zeph_body_has "legacy array form summary"
+
+echo
+echo "[off-by-one regression — turn-2 push must NOT leak turn-1 text]"
+# The bug the string-content fix targets: turn 1 ends with a text answer;
+# turn 2 does 2 tools and the Stop hook fires before turn 2's final text
+# is flushed. Broken scoping → SUMMARY = turn-1 text → the push leaks the
+# previous answer. Fixed → scope to turn 2 → empty summary → default body.
+run_hook "$FIXTURES/main-stale-summary.jsonl"
+assert     "fires (turn-2 crossed the >=2 gate)"   zeph_called
+assert_not "body does NOT leak previous turn text" zeph_body_has "PREV_TURN_ANSWER"
+assert     "body falls back to default form"       zeph_body_has "tools"
 
 echo
 echo "[multi-turn — scoping respects the LAST real user turn]"
-# First turn: 5 tools. Second turn: 1 tool. Stop hook runs at the end
-# of the second turn — must count only that turn's 1 tool, not 5+1=6.
+# First turn: 5 tools. Second turn: 1 tool. Stop hook runs at the end of
+# the second turn — TOOL_COUNT must count only that turn's 1 tool, not
+# 5+1=6. With broken string-content detection it would count all 6 and
+# wrongly fire.
 run_hook "$FIXTURES/main-multi-turn.jsonl"
 assert "ignores tool_use from earlier turns" zeph_silent
 

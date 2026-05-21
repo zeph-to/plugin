@@ -38,21 +38,38 @@ esac
 
 # Scope all checks to "entries since the last *real* user message" — Claude
 # Code logs tool_results as synthetic user messages, so a naive
-# role=="user" filter would slice mid-turn. A real user turn is a user
-# message whose content carries a text block.
+# role=="user" filter would slice mid-turn.
 #
-# Defensive note: some transcript entries (system prompts, certain meta
-# events) carry a STRING content instead of the usual array of content
-# blocks. Calling `map(.type)` on a string crashes the whole jq pipeline
-# with "Cannot iterate over string", which silently fails the Stop hook.
-# Every place we touch .content is now guarded with `type == "array"`.
+# What counts as a *real* user turn:
+#   - A message the user typed. Current Claude Code logs these with
+#     `.message.content` as a plain STRING. Older transcripts used an
+#     array carrying a {"type":"text"} block. Both forms count.
+#   - A tool_result is also a user-role message, but its content is an
+#     array of tool_result blocks with no text block — it does NOT count.
+#
+# Defensive note: system prompts and meta events also carry STRING
+# content. `content_blocks` guards every array access with
+# `type == "array"` so `map(.type)` never crashes on a string ("Cannot
+# iterate over string", which would silently kill the Stop hook).
+#
+# History: 0.5.1 added that string guard to stop the crash, but routed
+# is_real_user through `content_blocks` too. Once Claude Code switched
+# typed user messages to string content, the guard turned every real
+# turn into [] — is_real_user never matched, since_last_user silently
+# fell back to the whole transcript, and per-turn scoping died (stale
+# summaries, cumulative tool counts). is_real_user now treats non-empty
+# string content as a real turn directly.
 JQ_SINCE_USER='
 def content_blocks:
     .message?.content as $c
     | if ($c | type) == "array" then $c else [] end;
 def is_real_user:
     .message?.role == "user"
-    and (content_blocks | map(.type) | index("text") != null);
+    and (
+        ((.message?.content | type) == "string"
+         and (.message?.content | length) > 0)
+        or (content_blocks | map(.type) | index("text") != null)
+    );
 def since_last_user:
     . as $all
     | ($all | map(is_real_user) | reverse | index(true)) as $rev
@@ -95,17 +112,35 @@ fi
 PROJECT=$(basename "$CLAUDE_PROJECT_DIR" 2>/dev/null || echo "unknown")
 BRANCH=$(git -C "$CLAUDE_PROJECT_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "-")
 
-# Pull the last assistant text content this turn as the body summary.
-SUMMARY=$(jq -rs "$JQ_SINCE_USER"'
-    since_last_user
-    | [.[]
-       | select(.message?.role == "assistant")
-       | content_blocks
-       | map(select(.type == "text") | .text)
-       | join(" ")
-       | select(. != "")]
-    | last // ""
-' "$TRANSCRIPT" 2>/dev/null)
+# Pull the last assistant text content THIS turn as the body summary.
+#
+# Timing: Claude Code fires the Stop hook a beat before it flushes the
+# turn's final assistant text line to the transcript file. A single read
+# therefore often misses the summary — it lands an instant later. Re-read
+# a few times (cheap; it's a local file) until the text appears, then
+# give up and let BODY fall back to the generic "branch — N tools" form.
+# Note this only matters for the body text: tool_use entries are written
+# as the turn runs, so TOOL_COUNT / ALREADY_ASKED above are unaffected.
+extract_summary() {
+    jq -rs "$JQ_SINCE_USER"'
+        since_last_user
+        | [.[]
+           | select(.message?.role == "assistant")
+           | content_blocks
+           | map(select(.type == "text") | .text)
+           | join(" ")
+           | select(. != "")]
+        | last // ""
+    ' "$TRANSCRIPT" 2>/dev/null
+}
+
+SUMMARY=$(extract_summary)
+summary_tries=0
+while [ -z "$SUMMARY" ] && [ "$summary_tries" -lt 5 ]; do
+    sleep 0.2
+    SUMMARY=$(extract_summary)
+    summary_tries=$((summary_tries + 1))
+done
 
 # Match the original 0.4.0 behavior of passing the full assistant summary
 # through to `zeph notify`. The CLI itself decides what to do with long
