@@ -1,6 +1,6 @@
 # Zeph — AI Agent Notifications
 
-Get push notifications on your phone when your AI coding agent finishes work or needs input.
+Get push notifications on your phone when your AI coding agent finishes work or needs input — and **reply from the phone straight back into your CC session** without touching your terminal.
 
 Works with Claude Code, Gemini CLI, Cursor, Windsurf, and more.
 
@@ -17,6 +17,8 @@ npx @zeph-to/hook-sdk install --key ak_... --hook hook_... # non-interactive (fr
 ```
 
 Restart Claude Code after setup. Notifications will start automatically.
+
+> **Remote control bonus.** Launch Claude through `zeph cc` (from `@zeph-to/hook-sdk`) and the phone's "Active Agents" picker can type into the session directly — no terminal context-switch required. See [hook-sdk Remote Control](https://github.com/zeph-to/hook-sdk#remote-control) for the one-step setup.
 
 ## What You Get
 
