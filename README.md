@@ -1,5 +1,11 @@
 # Zeph — AI Agent Notifications
 
+[![release](https://img.shields.io/github/v/release/zeph-to/plugin?label=plugin&sort=semver)](https://github.com/zeph-to/plugin/releases)
+[![marketplace](https://img.shields.io/badge/claude--code-plugin-blueviolet)](https://github.com/zeph-to/plugin)
+[![hook-sdk](https://img.shields.io/npm/v/@zeph-to/hook-sdk?label=%40zeph-to%2Fhook-sdk)](https://www.npmjs.com/package/@zeph-to/hook-sdk)
+[![mcp-server](https://img.shields.io/npm/v/@zeph-to/mcp-server?label=%40zeph-to%2Fmcp-server)](https://www.npmjs.com/package/@zeph-to/mcp-server)
+[![license](https://img.shields.io/github/license/zeph-to/plugin)](./LICENSE)
+
 Get push notifications on your phone when your AI coding agent finishes work or needs input — and **reply from the phone straight back into your CC session** without touching your terminal.
 
 Works with Claude Code, Gemini CLI, Cursor, Windsurf, and more.
