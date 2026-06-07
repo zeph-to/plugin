@@ -2,7 +2,7 @@
 # PreToolUse(AskUserQuestion) hook — push the asked question to the user's
 # device so they can see it without being at the terminal.
 
-ZEPH_CMD="$(command -v zeph 2>/dev/null || echo "npx -y @zeph-to/hook-sdk")"
+ZEPH_CMD="$(command -v zeph 2>/dev/null || echo "npx -y @zeph-to/cli")"
 
 command -v jq >/dev/null 2>&1 || exit 0
 
