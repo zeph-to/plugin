@@ -7,14 +7,14 @@
 │ Layer 3: Plugin (hooks)                                     │
 │ → 자동 실행. Claude Code 전용. 100% 신뢰.                    │
 │ → Stop hook, AskUserQuestion hook                           │
-│ → zeph CLI (@zeph-to/hook-sdk) 사용                          │
+│ → zeph CLI (@zeph-to/cli) 사용                          │
 ├─────────────────────────────────────────────────────────────┤
 │ Layer 2: MCP Server (@zeph-to/mcp-server)                   │
 │ → AI가 tool 호출. 요청 시 동작.                               │
 │ → zeph_ask, zeph_notify, zeph_prompt, zeph_input 등         │
 │ → Claude Code, Gemini CLI, Cursor, Windsurf 지원            │
 ├─────────────────────────────────────────────────────────────┤
-│ Layer 1: CLI (@zeph-to/hook-sdk)                            │
+│ Layer 1: CLI (@zeph-to/cli)                            │
 │ → shell command. 어디서든 실행 가능.                          │
 │ → zeph notify --title "..." --body "..."                    │
 │ → notify만 가능. prompt/input 불가.                          │
@@ -25,7 +25,7 @@
 
 | | CLI | MCP Server | Plugin (hooks) |
 |---|---|---|---|
-| **npm 패키지** | @zeph-to/hook-sdk | @zeph-to/mcp-server | — (GitHub repo) |
+| **npm 패키지** | @zeph-to/cli | @zeph-to/mcp-server | — (GitHub repo) |
 | **실행 방식** | shell command | AI agent가 tool 호출 | Claude Code event hook |
 | **트리거** | 수동 / hook script | AI 자발적 or 유저 요청 | 자동 (이벤트 기반) |
 | **신뢰도** | 100% | ~70% (요청 시 100%) | 100% |
@@ -98,7 +98,7 @@ Claude가 유저에게 질문 (AskUserQuestion tool 호출)
 
 ```bash
 # 설치
-npm i -g @zeph-to/hook-sdk
+npm i -g @zeph-to/cli
 
 # 기본 사용
 zeph notify --title "빌드 완료" --body "에러 0건"
@@ -122,7 +122,7 @@ zeph notify --title "dev test"
   → Claude가 bash 실행: touch /tmp/zeph-muted-{cksum hash}
   → Stop hook: mute 파일 체크 → exit 0 (알림 skip)
   → Ask hook: mute 파일 체크 → exit 0 (알림 skip)
-  → CLI (hook-sdk): mute 파일 체크 → exit 0 (다른 agent도 적용)
+  → CLI (cli): mute 파일 체크 → exit 0 (다른 agent도 적용)
 ```
 
 - **Scope:** project-dir 기반 hash. 다른 프로젝트 세션은 영향 없음.
@@ -150,6 +150,6 @@ zeph notify --key ak_... --title "Deploy 완료"
 ```
 
 ### 5. 다른 AI 에이전트 (Cursor, Windsurf, Gemini, Codex, Copilot, Cline, Aider)에서 쓰고 싶다
-→ **`npx @zeph-to/hook-sdk install` 한 번이면 됨.** 설치된 에이전트를 감지해서 각각 MCP 서버 + 알림 훅 + 행동 룰 파일(각 에이전트의 native always-on 위치)을 설정.
-→ 행동 룰(zeph_ask 사용법, sticky REMOTE 등)은 7개 에이전트 모두 동일하게 적용됨 — hook-sdk의 templates.ts 공통 코어에서 생성.
+→ **`npx @zeph-to/cli install` 한 번이면 됨.** 설치된 에이전트를 감지해서 각각 MCP 서버 + 알림 훅 + 행동 룰 파일(각 에이전트의 native always-on 위치)을 설정.
+→ 행동 룰(zeph_ask 사용법, sticky REMOTE 등)은 7개 에이전트 모두 동일하게 적용됨 — cli의 templates.ts 공통 코어에서 생성.
 → Claude Code는 plugin이 SessionStart 훅으로 룰 주입, 나머지는 native 룰 파일.

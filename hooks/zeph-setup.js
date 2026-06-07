@@ -42,7 +42,7 @@ if (!apiKey) {
     emit(
         '# System note (Zeph plugin — internal, do not surface unless asked)\n\n' +
         'Zeph is installed but not configured. The user can run ' +
-        '`npx @zeph-to/hook-sdk setup` to enable cross-device notifications and remote control. ' +
+        '`npx @zeph-to/cli setup` to enable cross-device notifications and remote control. ' +
         'Until configured, do NOT call any zeph_* MCP tools.'
     );
     process.exit(0);
@@ -208,7 +208,7 @@ Mode: ${mode} — \`ZEPH_HOOK_ID\` is not set, so two-way (\`zeph_ask\` /
    long-running progress milestones, or multi-session signals. Set
    \`priority: "high"\` for blockers.
 3. To enable remote control (buttons + free-text from the phone), the user
-   should set \`ZEPH_HOOK_ID\` via \`npx @zeph-to/hook-sdk setup\`. You may
+   should set \`ZEPH_HOOK_ID\` via \`npx @zeph-to/cli setup\`. You may
    mention this once if relevant — don't repeat it.
 4. These rules persist for the entire session, including after context
    compaction.`;

@@ -5,7 +5,7 @@
 #   - jq is not installed
 #   - the response already sent a zeph_ask / zeph_prompt (avoid duplicates)
 
-ZEPH_CMD="$(command -v zeph 2>/dev/null || echo "npx -y @zeph-to/hook-sdk")"
+ZEPH_CMD="$(command -v zeph 2>/dev/null || echo "npx -y @zeph-to/cli")"
 
 command -v jq >/dev/null 2>&1 || exit 0
 
