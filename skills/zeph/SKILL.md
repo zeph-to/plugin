@@ -7,7 +7,7 @@ description: >
   Triggers on task completion, build/test/deploy, error handling, user decisions.
 metadata:
   author: zeph-to
-  version: "0.5.8"
+  version: "0.5.9"
 ---
 
 # Zeph — AI Agent Notification Skill
