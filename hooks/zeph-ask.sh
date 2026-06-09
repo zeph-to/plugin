@@ -12,6 +12,13 @@ MUTE_HASH=$(printf '%s' "${CLAUDE_PROJECT_DIR:-$(pwd)}" | cksum | cut -d' ' -f1)
 INPUT=$(cat)
 QUESTION=$(printf '%s' "$INPUT" | jq -r '.tool_input.question // .tool_input.questions[0].question // "Question pending"' 2>/dev/null)
 
+# AskUserQuestion carries its choices in .questions[].options[].label. The
+# default extractor dropped them, so the phone saw only the question stem with
+# no idea what the options were. Surface the labels so the user at least knows
+# the choices — even though this is a one-way notify (the AskUserQuestion picker
+# is a LOCAL blocking UI that cannot be answered from the phone).
+OPTIONS=$(printf '%s' "$INPUT" | jq -r '[.tool_input.questions[0].options[]?.label // empty] | join(" · ")' 2>/dev/null)
+
 # UTF-8 safe trim to ~200 chars so multibyte characters (e.g. Korean) don't
 # get sliced in the middle and turned into mojibake. Falls back to byte-wise
 # `head -c` only when python3 is unavailable.
@@ -27,8 +34,18 @@ sys.stdout.write(sys.stdin.read()[:n])
         head -c "$n"
     fi
 }
-QUESTION=$(printf '%s' "$QUESTION" | trim_chars 200)
+QUESTION=$(printf '%s' "$QUESTION" | trim_chars 160)
+OPTIONS=$(printf '%s' "$OPTIONS" | trim_chars 120)
 
 PROJECT=$(basename "$CLAUDE_PROJECT_DIR" 2>/dev/null || echo "unknown")
 
-$ZEPH_CMD notify --title "Claude asks: $PROJECT" --body "$QUESTION" 2>/dev/null || true
+# Build the body: question, the choices (when present), and an honest note that
+# this picker must be answered at the terminal — the title says "asks" but a
+# one-way notify can't round-trip an AskUserQuestion answer from the phone.
+BODY="$QUESTION"
+[ -n "$OPTIONS" ] && BODY="$BODY
+▸ $OPTIONS"
+BODY="$BODY
+↳ answer at the terminal (phone can't drive this picker)"
+
+$ZEPH_CMD notify --title "Claude asks: $PROJECT" --body "$BODY" 2>/dev/null || true

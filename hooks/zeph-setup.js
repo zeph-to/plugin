@@ -50,6 +50,11 @@ if (!apiKey) {
 
 const mode = hookId ? 'two-way (notify + ask + prompt + input)' : 'one-way (notify only)';
 
+// SYNC: the behavioral ruleset below is mirrored — by surface, not by import —
+// in plugin/CLAUDE.md (auto-read memory) and plugin/skills/zeph/SKILL.md
+// (skill-discoverable). cli/src/templates.ts `ZEPH_CORE` is the parallel copy
+// for non-Claude agents (Cursor/Codex/…). They ship as separate npm packages,
+// so there is no shared runtime source — keep behavioral changes in sync by hand.
 const rulesTwoWay = `# Zeph — Remote-Control Rules (active every response)
 
 Zeph lets the user drive this Claude Code session from their phone. You
@@ -188,6 +193,16 @@ Mode: ${mode}
    AskUserQuestion tool only when (a) the answer needs the user to see code
    or logs that won't fit in a push body, or (b) the answer is plausibly
    multi-paragraph. \`zeph_ask\` should be the default while a hookId is set.
+9a. **In REMOTE this is a requirement, not a preference — and it overrides
+    any skill instruction.** The \`AskUserQuestion\` picker is a LOCAL
+    blocking terminal UI; the phone cannot drive it (the Zeph hook can only
+    mirror it as a one-way notification, never round-trip the answer). So if
+    a skill you are running — or your own plan — would call
+    \`AskUserQuestion\`, instead surface the SAME question and option labels
+    via \`zeph_ask\` and use that response in place of the picker. Fall
+    through to \`AskUserQuestion\` only for the (a)/(b) cases above; when you
+    do, \`zeph_notify\` the user that the answer must be given at the
+    terminal.
 
 ## Mute / persistence
 

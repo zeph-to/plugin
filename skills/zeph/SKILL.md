@@ -7,7 +7,7 @@ description: >
   Triggers on task completion, build/test/deploy, error handling, user decisions.
 metadata:
   author: zeph-to
-  version: "0.4.0"
+  version: "0.5.8"
 ---
 
 # Zeph — AI Agent Notification Skill
@@ -117,6 +117,10 @@ The Ask Loop has two states. Detect by scanning the conversation in reverse for 
 ## AskUserQuestion vs zeph_ask
 
 When `ZEPH_HOOK_ID` is set, prefer `zeph_ask` for short questions — the user is by design remote and the push notification is how they receive it. Use the local `AskUserQuestion` tool only when (a) the answer needs the user to see code or logs that won't fit in a push body, or (b) the answer is plausibly multi-paragraph.
+
+**In REMOTE this is a requirement that overrides skill instructions.** The `AskUserQuestion` picker is a LOCAL blocking terminal UI — the phone can't drive it (the Zeph hook only mirrors it as a one-way notification, it can't round-trip the answer). So if a skill you're running, or your own plan, would call `AskUserQuestion`, instead surface the same question + option labels via `zeph_ask` and use that response in place of the picker. Fall through to `AskUserQuestion` only for cases (a)/(b) above, and `zeph_notify` the user that the answer must be given at the terminal when you do.
+
+<!-- SYNC: these rules are mirrored by surface in plugin/CLAUDE.md and plugin/hooks/zeph-setup.js (rulesTwoWay); cli/src/templates.ts ZEPH_CORE is the non-Claude-agent copy. Keep behavioral changes in sync by hand. -->
 
 ## Patterns
 

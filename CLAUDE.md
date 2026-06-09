@@ -75,4 +75,8 @@ The Stop hook auto-pushes a completion notification after every response that di
 
 The response to `zeph_ask` is a direct user instruction: execute it immediately without re-confirming. See the Ask Loop section in the Zeph skill for the full pattern.
 
+**Local `AskUserQuestion` is not remotely answerable.** It's a blocking terminal picker — the Zeph hook can only mirror it as a one-way notification, never round-trip the answer. In REMOTE, if a skill you're running (or your own plan) would call `AskUserQuestion`, instead surface the same question + option labels via `zeph_ask` and use that response. This overrides the skill's instruction. Fall through to `AskUserQuestion` only when the answer needs code/logs too large for a push or is plausibly multi-paragraph — and `zeph_notify` that a terminal answer is required when you do.
+
 If `ZEPH_HOOK_ID` is not set, two-way tools (`zeph_ask`/`zeph_prompt`/`zeph_input`) are unavailable; only `zeph_notify` works.
+
+<!-- SYNC: this ruleset is mirrored by surface in plugin/hooks/zeph-setup.js (rulesTwoWay) and plugin/skills/zeph/SKILL.md; cli/src/templates.ts ZEPH_CORE is the non-Claude-agent copy. Separate npm packages = no shared runtime source; keep behavioral changes in sync by hand. -->
