@@ -1,0 +1,282 @@
+# Zeph Hooks — Deep Dive
+
+How the three Claude Code hooks work, what they do, and how to debug them.
+
+---
+
+## Overview
+
+The plugin installs 3 hooks that fire automatically on Claude Code events:
+
+| Hook | Event | File | Purpose |
+|------|-------|------|---------|
+| **SessionStart** | Session begins | zeph-setup.js | Inject behavioral rules into context |
+| **Stop** | Response ends | zeph-stop.sh | Send completion notification if work was done |
+| **PreToolUse** (Ask) | Before AskUserQuestion | zeph-ask.sh | Send notification when Claude asks user a question |
+
+---
+
+## SessionStart Hook (zeph-setup.js)
+
+**What it does:**
+- Runs once at the start of every Claude Code session
+- Reads `CORE_RULES.md` to check configuration
+- Injects behavioral rules into the session context
+- Emits JSON output (not stdout) so the rules land in Claude's context, not just the user's transcript
+
+**When it runs:**
+- Every time you start Claude Code (`claude` command)
+- Once per session (does not re-run mid-session)
+
+**What it injects:**
+- If `ZEPH_API_KEY` is set: rules for two-way or one-way mode (depending on `ZEPH_HOOK_ID`)
+- If `ZEPH_API_KEY` is NOT set: helper message suggesting `npx @zeph-to/cli setup`
+
+**Example output:**
+
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "SessionStart",
+    "additionalContext": "# Zeph — Remote-Control Rules (active every response)\n\nZeph lets the user drive this session from their phone...\n[full rules from CORE_RULES.md]"
+  }
+}
+```
+
+**Debugging:**
+
+Check if rules are injected:
+```bash
+# Look at the end of your first Claude response — the rules should appear
+# in the system context (not user-visible unless you ask)
+grep -i "remote-control" ~/.claude/transcripts/latest.jsonl
+```
+
+If rules are missing:
+```bash
+# Verify CORE_RULES.md exists and is readable
+ls -la /path/to/plugin/docs/CORE_RULES.md
+
+# Check if config file is readable
+ls -la ~/.zeph/config.json
+echo $ZEPH_API_KEY
+```
+
+---
+
+## Stop Hook (zeph-stop.sh)
+
+**What it does:**
+- Fires after every Claude Code response
+- Counts how many tool calls were made in this response (THIS TURN ONLY)
+- If count ≥ 2: sends a push notification via the CLI
+- If count < 2: stays silent (avoids spam for simple chats)
+- Skips notification if project is muted (`/zeph-mute`)
+
+**When it runs:**
+- After every response Claude makes
+- But also after sub-agent sessions (Task tool) and observer sessions (claude-mem)
+
+**Filtering logic:**
+
+The hook is smart about WHAT to count:
+
+1. **Project scope**: Only looks at the main interactive transcript
+   - Skips sub-agent transcripts (`*/subagents/*`)
+   - Skips background observer sessions (`*observer*`)
+   - Result: Only notifies when the USER's main turn ends, not internal tool calls
+
+2. **Tool call scope**: Counts from the last REAL user message
+   - "Real user message" = user typed something (string content)
+   - NOT a tool_result (array of blocks, no text)
+   - Result: Counts only work done SINCE the user's last input
+
+3. **Mute check**: Skips if project is muted
+   - Checks for `/tmp/zeph-muted-{hash}` file
+   - Hash = `cksum(project-dir)`
+   - Result: `/zeph-mute` command silences notifications
+
+**Example execution flow:**
+
+```
+User types: "build and commit"
+  ↓
+Claude runs: [call tool 1] [call tool 2] → response "Built and committed."
+  ↓
+Stop hook fires:
+  1. Check mute file → not muted ✓
+  2. Check jq installed → yes ✓
+  3. Read transcript
+  4. Find last real user message (index N)
+  5. Count tool_use entries from index N to end → 2 tools ✓
+  6. Count zeph_ask calls → 0 (no duplicate) ✓
+  7. Run: `zeph notify --title "Task done" --body "build · main"`
+  ↓
+User gets push on phone: "Task done — build · main"
+```
+
+**Debugging:**
+
+Check if tool count is correct:
+```bash
+# Manually count tool_use entries in your transcript
+tail -20 ~/.claude/transcripts/latest.jsonl | grep '"type":"tool_use"' | wc -l
+
+# Should be ≥ 2 for a notification to fire
+```
+
+Check if jq is installed:
+```bash
+command -v jq && echo "✓ jq installed" || echo "✗ jq missing (install: brew install jq)"
+```
+
+Check if mute file exists:
+```bash
+HASH=$(echo -n "$(pwd)" | cksum | cut -d' ' -f1)
+ls -la /tmp/zeph-muted-$HASH
+
+# If file exists, notifications are silenced. Remove to unmute:
+# rm /tmp/zeph-muted-$HASH
+```
+
+Test the hook manually:
+```bash
+# Simulate what the hook does (count tools since last real user message)
+jq -r '.[] | select(.role=="assistant") | .message.content? // empty' \
+  ~/.claude/transcripts/latest.jsonl | tail -1 | grep -o '"type":"tool_use"' | wc -l
+```
+
+**Why sometimes silent:**
+- Tool count < 2 (simple response, no work)
+- jq not installed (hook exits early)
+- Project is muted (`/zeph-mute` was run)
+- Mute file still exists (stale from previous session)
+- Response already sent a `zeph_ask` (Stop hook deduplicates)
+
+---
+
+## Ask Hook (zeph-ask.sh)
+
+**What it does:**
+- Fires when Claude calls `AskUserQuestion` tool
+- Extracts the question text from the tool call
+- Sends it as a push notification via the CLI
+- User must answer at the terminal (can't answer from phone)
+
+**When it runs:**
+- Only when Claude explicitly calls `AskUserQuestion`
+- Not automatic (depends on Claude's behavior)
+
+**Example flow:**
+
+```
+Claude thinks: "I need to ask the user to choose between A and B"
+  ↓
+Claude calls: AskUserQuestion({ prompt: "Choose A or B?" })
+  ↓
+PreToolUse hook fires (before the tool actually executes):
+  1. Extract the question: "Choose A or B?"
+  2. Run: `zeph notify --title "Claude question" --body "Choose A or B?"`
+  ↓
+User gets push on phone
+  ↓
+User switches to terminal and answers the question locally
+```
+
+**Debugging:**
+
+Check if tool was called:
+```bash
+# Look for AskUserQuestion in the transcript
+grep -i "askyserquestion" ~/.claude/transcripts/latest.jsonl
+```
+
+Check the notification was sent:
+```bash
+# List recent pushes
+zeph list --limit 5
+```
+
+Check for errors:
+```bash
+# If the hook silently failed, check:
+# 1. Is zeph CLI installed? 
+command -v zeph || echo "npx -y @zeph-to/cli" 
+
+# 2. Is ZEPH_API_KEY set?
+echo $ZEPH_API_KEY
+
+# 3. Is the project muted?
+HASH=$(echo -n "$(pwd)" | cksum | cut -d' ' -f1)
+ls /tmp/zeph-muted-$HASH
+```
+
+---
+
+## Full Event Timeline
+
+Here's what happens during a typical Claude Code session:
+
+```
+TimelineEvent                            | Hook      | Output
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. $ claude (start session)              | START     | Rules injected into context
+2. User types: "fix bug in X.ts"         |           | (no hook)
+3. Claude responds + calls 2 tools       | STOP      | Push: "Task done — fix · main"
+4. $ (user reads push on phone)          |           | (no hook)
+5. User types: "actually, also Y too"   |           | (no hook)
+6. Claude calls AskUserQuestion          | ASK       | Push: "Claude question: deploy now?"
+7. (user sees phone push)                |           | (no hook)
+8. User answers at terminal              |           | (no hook)
+9. Claude processes answer + runs tools  | STOP      | Push: "Task done — deploy · main"
+10. User types: "done" → Claude exits    | STOP      | (exit, no push — hook sees 0 tools)
+```
+
+---
+
+## Common Issues & Fixes
+
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| No notifications at all | `jq` not installed | `brew install jq` (macOS) or `apt install jq` (Linux) |
+| Duplicate notifications | zeph_ask was called + Stop hook fired | Claude is following rules correctly; Ask loop working |
+| Notifications muted | `/zeph-mute` was run | Run `/zeph-unmute` to re-enable |
+| Question notifications missing | Claude didn't call AskUserQuestion | Check: is Claude asking plainly instead? (rule violation) |
+| Wrong project name in push | `CLAUDE_PROJECT_DIR` not set | Set env var or hooks use `git rev-parse --show-toplevel` |
+
+---
+
+## Testing Hooks Offline
+
+You can test the logic without running Claude Code:
+
+```bash
+# Test zeph-stop.sh: count tools in a sample transcript
+echo '{"type":"tool_use"}{"type":"tool_use"}' | jq . | grep tool_use | wc -l
+
+# Test zeph-ask.sh: extract question from tool call
+echo '{"type":"tool_use","name":"AskUserQuestion","input":{"prompt":"Test?"}}' | jq '.input.prompt'
+
+# Test mute check
+HASH=$(echo -n "." | cksum | cut -d' ' -f1)
+touch /tmp/zeph-muted-$HASH && echo "✓ Mute file created"
+[ -f "/tmp/zeph-muted-$HASH" ] && echo "✓ Mute check works"
+rm /tmp/zeph-muted-$HASH
+```
+
+---
+
+## Extending Hooks
+
+To add custom behavior (e.g., call an external API, log to file):
+
+1. **Do NOT modify** `zeph-stop.sh` or `zeph-ask.sh` directly (they're from the plugin)
+2. **Instead**, add a custom hook in your project's `.claude/hooks/` directory
+3. **Example**: Create `~/.claude/hooks/stop.sh` in YOUR project to run alongside the plugin hook
+
+Plugin hooks + custom hooks both fire in order.
+
+---
+
+**Last updated**: 2026-06-26
+**Relevant**: All Zeph users experiencing hook issues or debugging notifications

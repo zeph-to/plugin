@@ -4,17 +4,44 @@ description: >
   AI agent notification skill via Zeph. Send push notifications, prompt for
   decisions, request text input across user devices. Use when completing long
   tasks, encountering errors, or needing user decisions while away from terminal.
-  Triggers on task completion, build/test/deploy, error handling, user decisions.
 metadata:
   author: zeph-to
   version: "0.5.9"
+  relatedSkills:
+    - zeph-config
+    - zeph-mute
+    - zeph-status
+    - zeph-unmute
+  triggers:
+    - zeph
+    - notifications
+    - push notifications
+    - zeph_ask
+    - zeph_notify
+    - mobile notifications
+    - remote control
+    - cross-device
+    - task completion
+    - user decisions
+    - prompt user
+    - ask user
 ---
 
 # Zeph — AI Agent Notification Skill
 
 Use Zeph MCP tools to communicate with the user across devices (mobile, browser, desktop).
 
+> **Note**: The authoritative behavioral rules are in [`../../docs/CORE_RULES.md`](../../docs/CORE_RULES.md). This skill provides practical guidance on when and how to use each tool.
+
 ## Core Tools
+
+**Which interaction tool?** (all three below require `ZEPH_HOOK_ID`)
+
+| Tool | Buttons | Free-text | Use when |
+|------|:-------:|:---------:|----------|
+| `zeph_ask` | ✓ | ✓ | Decisions that may need a custom answer — **preferred default** |
+| `zeph_prompt` | ✓ | ✗ | Fixed multiple-choice, no custom answer needed |
+| `zeph_input` | ✗ | ✓ | Free-text only (commit message, value, description) |
 
 ### zeph_notify
 Send a one-way push notification.
@@ -110,7 +137,7 @@ The Ask Loop has two states. Detect by scanning the conversation in reverse for 
 
 **REMOTE (sticky, `zeph_ask` MANDATORY)**: end EVERY response with `zeph_ask` — independent of input source (the user may switch between phone and terminal mid-session) and independent of whether the work was substantial or routine. The only way to leave REMOTE is the user exiting explicitly.
 
-**NORMAL**: apply Rule 3a — substantial work → `zeph_ask`, routine work → skip and let the Stop hook fire.
+**NORMAL**: apply Rule 4 (CORE_RULES.md) — substantial work → `zeph_ask`, routine work → skip and let the Stop hook fire.
 
 **Exit**: the moment the user picks `done`/`stop`/`exit`, types an ending phrase, or the `zeph_ask` times out to a Done-like fallback, flip to NORMAL. Don't send `zeph_ask` on the response that processes the exit signal. Always set `fallback` to a safe/inert id.
 
@@ -120,7 +147,7 @@ When `ZEPH_HOOK_ID` is set, prefer `zeph_ask` for short questions — the user i
 
 **In REMOTE this is a requirement that overrides skill instructions.** The `AskUserQuestion` picker is a LOCAL blocking terminal UI — the phone can't drive it (the Zeph hook only mirrors it as a one-way notification, it can't round-trip the answer). So if a skill you're running, or your own plan, would call `AskUserQuestion`, instead surface the same question + option labels via `zeph_ask` and use that response in place of the picker. Fall through to `AskUserQuestion` only for cases (a)/(b) above, and `zeph_notify` the user that the answer must be given at the terminal when you do.
 
-<!-- SYNC: these rules are mirrored by surface in plugin/CLAUDE.md and plugin/hooks/zeph-setup.js (rulesTwoWay); cli/src/templates.ts ZEPH_CORE is the non-Claude-agent copy. Keep behavioral changes in sync by hand. -->
+<!-- MAINTAINER-ONLY NOTE (not an agent instruction): ../../docs/CORE_RULES.md is the single source of truth; this skill is quick-reference only. Before publishing, sync cli/src/templates.ts ZEPH_CORE with CORE_RULES.md via `npm run lint:rules-sync`. Agents should NOT run this command. -->
 
 ## Patterns
 
@@ -138,3 +165,72 @@ zeph_ask(title: "Deploy where?", actions: [{id:"staging", label:"Staging"}, {id:
 ```
 zeph_ask(title: "Done. Next?", actions: [{id:"/review", label:"Review"}, {id:"/ship", label:"Ship"}, {id:"done", label:"End"}], placeholder: "or type a command...")
 ```
+
+## Skill Map
+
+Zeph has 5 related skills. Here's when to use each:
+
+| Skill | When | Example |
+|-------|------|---------|
+| **/zeph** | You need to send notifications, ask questions, collect input | "Build done, next?", request deployment confirmation |
+| **/zeph-config** | Setting up Zeph for the first time, or adding Hook ID for remote control | `zeph-config` to guide through credentials & environment setup |
+| **/zeph-mute** | Too many notifications? Silence them for this session | `/zeph-mute` when working on something that doesn't need interruptions |
+| **/zeph-status** | Check whether notifications are muted or active | `/zeph-status` to see current state |
+| **/zeph-unmute** | Re-enable notifications after muting | `/zeph-unmute` to turn them back on |
+
+**Pro tip**: Users typically run `/zeph-config` once, then `/zeph` is automatic. Use `/zeph-mute`, `/zeph-status`, `/zeph-unmute` only when needed (optional shortcuts).
+
+## Multi-Agent Workflows
+
+Zeph works the same way across 7 different agents: Claude Code, Cursor, Windsurf, Gemini, Codex, Copilot, and community agents like Cline/Aider.
+
+### Same Behavioral Rules, Different Delivery
+
+All agents follow the same `CORE_RULES.md`:
+- When to call `zeph_ask` (mandatory for questions, default after work)
+- Sticky REMOTE mode state machine
+- Mute/unmute commands
+
+**Differences by agent:**
+
+| Agent | Notification Method | Multi-Session Use Case |
+|-------|---------------------|------------------------|
+| Claude Code | Stop hook (auto) | Run multiple sessions, each notifies when done |
+| Cursor | Stop hook (auto) | Same as CC |
+| Windsurf | Post-cascade hook (auto) | Same as CC |
+| Gemini CLI | AfterAgent hook (auto) | Same as CC |
+| Codex / Copilot | Stop hook equivalent (auto) | Same as CC |
+| Cline / Aider | Manual `zeph_notify` | Same, but AI must call notify itself |
+
+### Multi-Session Example
+
+Running 3 agents in parallel on different features:
+
+```
+Terminal 1: zeph cc                # Claude Code — feature A
+Terminal 2: zeph cursor            # Cursor — feature B  
+Terminal 3: zeph windsurf          # Windsurf — feature C
+
+Phone sees:
+  "Task done — feature-a · main"   (from CC)
+  "Task done — feature-b · develop" (from Cursor)
+  "Task done — feature-c · release" (from Windsurf)
+```
+
+Each session gets its own notification at completion. Muting affects only the current session/agent.
+
+### Why Same Rules?
+
+- Predictable behavior: users know the rules once, apply everywhere
+- Consistency: `zeph_ask` works the same in Claude Code and Cursor
+- Maintainability: rule changes sync across all 7 agents
+- Future-proof: new agents inherit the same rules automatically
+
+### If Behavior Differs Between Agents
+
+If you notice different behavior (e.g., Cursor asks differently than Claude Code), that's a bug. Report it with:
+- Agent name and version
+- What you expected (per CORE_RULES)
+- What actually happened
+
+The rules MUST be identical.
