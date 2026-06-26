@@ -253,4 +253,4 @@ rm ~/.zeph/config.json
 
 ## License
 
-MIT
+Apache 2.0
