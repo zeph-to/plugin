@@ -2,6 +2,8 @@
 
 Use Zeph MCP tools to communicate with the user across devices (mobile, browser, desktop).
 
+> **Note**: The authoritative behavioral rules are in [`docs/CORE_RULES.md`](./docs/CORE_RULES.md). This file provides a quick reference. For full rule details, see that document.
+
 ## Core Tools
 
 ### zeph_notify
@@ -67,11 +69,11 @@ The Stop hook auto-pushes a completion notification after every response that di
 
 **`zeph_ask` is the DEFAULT end of a response after substantial work** (file changes, commits, builds, deploys, destructive ops, milestone completions). Skip it only for clearly trivial responses (read-only exploration, mid-step inside an explicit plan, single-line trivial fixes). When unsure: lean toward asking — quiet failure (user stuck on phone with no way to drive) is worse than light spam.
 
-**Chaining is governed by a sticky REMOTE mode.** The Ask Loop has two states — REMOTE and NORMAL — detected by scanning the conversation, not just the latest message.
+**Chaining is governed by a sticky REMOTE mode** ("sticky" = once entered, it stays on until the user explicitly exits — it does not reset per response). The Ask Loop has two states — REMOTE and NORMAL — detected by scanning the conversation, not just the latest message.
 
-- **REMOTE** is entered the first time a `zeph_ask` you sent receives a non-exit response (button tap or non-ending text). Once in REMOTE, end EVERY response with `zeph_ask` — independent of whether the next user message arrives as a `tool_result` or as a typed terminal message, and independent of whether the work was substantial or routine. Sticky REMOTE keeps the channel driveable when the user switches between phone and terminal mid-session.
-- **NORMAL** is the initial state and the state you return to after an exit signal. In NORMAL, apply Rule 3a (substantial work → ask, routine work → skip).
-- **Exit signals**: action id matching `done`/`stop`/`exit` (case-insensitive), ending free-text ("thanks, that's it"), or timeout fallback to a Done-like id. Flip to NORMAL immediately; don't send `zeph_ask` on the response that processes the exit.
+- **REMOTE** is entered the first time a `zeph_ask` you sent receives a *non-exit response*. A non-exit response is any button tap whose action id is NOT `done`/`stop`/`exit` AND any free-text that is not a session-ender (see Exit signals below). Once in REMOTE, end EVERY response with `zeph_ask` — independent of whether the next user message arrives as a `tool_result` or as a typed terminal message, and independent of whether the work was substantial or routine. This keeps the channel driveable when the user switches between phone and terminal mid-session.
+- **NORMAL** is the initial state and the state you return to after an exit signal. In NORMAL, apply Rule 4 (substantial work → ask, routine work → skip).
+- **Exit signals**: action id matching `done`/`stop`/`exit` (case-insensitive), free-text that clearly ends the session (e.g. "thanks, that's it" / "all good"), or a timeout fallback that resolved to a Done-like id. Flip to NORMAL immediately; don't send `zeph_ask` on the response that processes the exit.
 
 The response to `zeph_ask` is a direct user instruction: execute it immediately without re-confirming. See the Ask Loop section in the Zeph skill for the full pattern.
 
@@ -79,4 +81,4 @@ The response to `zeph_ask` is a direct user instruction: execute it immediately 
 
 If `ZEPH_HOOK_ID` is not set, two-way tools (`zeph_ask`/`zeph_prompt`/`zeph_input`) are unavailable; only `zeph_notify` works.
 
-<!-- SYNC: this ruleset is mirrored by surface in plugin/hooks/zeph-setup.js (rulesTwoWay) and plugin/skills/zeph/SKILL.md; cli/src/templates.ts ZEPH_CORE is the non-Claude-agent copy. Separate npm packages = no shared runtime source; keep behavioral changes in sync by hand. -->
+<!-- SYNC: See docs/CORE_RULES.md for the single source of truth. This file provides a condensed quick-reference version for system memory. The SessionStart hook (zeph-setup.js) reads CORE_RULES.md at runtime. Before publishing, sync cli/src/templates.ts ZEPH_CORE with CORE_RULES.md. Run: npm run lint:rules-sync -->
