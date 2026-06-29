@@ -73,10 +73,10 @@ npm version patch
 
 - ✅ CORE_RULES.md created (single source)
 - ✅ zeph-setup.js reads from CORE_RULES.md at runtime
-- ⏳ CLAUDE.md — needs review for mirroring vs. referencing
-- ⏳ SKILL.md — needs review for mirroring vs. referencing
-- ⏳ cli/src/templates.ts — needs sync during next release
-- ✅ lint-rules-sync.js script added for validation
+- ✅ CLAUDE.md — references CORE_RULES.md (condensed quick-reference, backref enforced by linter)
+- ✅ SKILL.md — references CORE_RULES.md (condensed guidance, backref enforced by linter)
+- ⏳ cli/src/templates.ts — needs sync during next release (external repo, manual)
+- ✅ lint-rules-sync.js validates the reference contract (exit 1 on breakage; `npm run lint:rules-sync`)
 
 ## Example: Adding a New Rule
 
@@ -115,8 +115,5 @@ npm version patch
 
 ## Next Steps
 
-1. Test that zeph-setup.js properly reads and injects rules
-2. Update CLAUDE.md to reference CORE_RULES.md instead of duplicating
-3. Update SKILL.md similarly
-4. During next release: sync cli/src/templates.ts with CORE_RULES.md
-5. Add CI check: `npm run lint:rules-sync` (exit 1 if divergence detected)
+1. During next release: sync `cli/src/templates.ts` `ZEPH_CORE` with CORE_RULES.md (external repo, manual)
+2. Wire `npm run lint:rules-sync` into CI (already exits 1 when the reference contract breaks)

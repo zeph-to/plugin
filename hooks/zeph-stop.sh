@@ -190,5 +190,14 @@ fi
 SESSION_FLAG=""
 [ -n "$SESSION_ID" ] && SESSION_FLAG="--session $SESSION_ID"
 
+# Default: stay silent on failure (a hook must never disrupt the session).
+# Opt-in: set ZEPH_HOOK_DEBUG=1 to capture stderr + failures to a log for
+# support, since the silent `2>/dev/null` otherwise hides every hook error.
 # shellcheck disable=SC2086
-$ZEPH_CMD notify --title "Claude: $PROJECT" --body "$BODY" --type hook $SESSION_FLAG 2>/dev/null || true
+if [ -n "$ZEPH_HOOK_DEBUG" ]; then
+    ZEPH_LOG="${ZEPH_HOOK_LOG:-/tmp/zeph-hook.log}"
+    $ZEPH_CMD notify --title "Claude: $PROJECT" --body "$BODY" --type hook $SESSION_FLAG \
+        >>"$ZEPH_LOG" 2>&1 || echo "[zeph-stop] notify failed at $(date '+%Y-%m-%d %H:%M:%S')" >>"$ZEPH_LOG"
+else
+    $ZEPH_CMD notify --title "Claude: $PROJECT" --body "$BODY" --type hook $SESSION_FLAG 2>/dev/null || true
+fi
