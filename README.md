@@ -32,10 +32,14 @@ Restart Claude Code after setup. Notifications will start automatically.
 
 | What happens | When |
 |-------------|------|
-| Push: task completion summary | Claude finishes work (2+ tool calls) |
+| Push: task completion summary | Claude finishes real work (≥2 tool calls, not just reads) |
 | Push: question text | Claude asks you a question |
 
 These use hooks — shell commands that fire on Claude events. 100% reliable.
+
+Read-only exploration turns stay quiet, and Claude can fine-tune any single push
+with a Push Signal (force an important one through, or skip a noisy one). You can
+also dial the overall volume — see [Mute & Push Mode](#mute--push-mode).
 
 ### On request — Claude calls when appropriate
 
@@ -52,17 +56,22 @@ With `ZEPH_HOOK_ID` configured, Claude prefers `zeph_ask` for decisions and inpu
 
 > `zeph_ask`, `zeph_prompt`, and `zeph_input` require `ZEPH_HOOK_ID` — enter it during `zeph install`.
 
-## Mute / Unmute
+## Mute & Push Mode
 
-Too many notifications? Mute them for the current session:
+Too many notifications? Mute them, or dial the volume, for the current session:
 
 ```
-/zeph-mute      — Disable notifications for this project
+/zeph-mute      — Disable all notifications for this project
 /zeph-unmute    — Re-enable notifications
-/zeph-status    — Check current state
+/zeph-status    — Check current state (mute + push mode)
+
+/zeph-quiet     — Only high-priority pushes reach you
+/zeph-loud      — Push on every turn
+/zeph-normal    — Restore the default (push on real work, quiet on reads)
 ```
 
-Muting creates a temp file in `/tmp` — cleared on reboot. Both hooks (auto-notifications) and CLI calls are silenced.
+These create a temp file in `/tmp` — cleared on reboot. Mute silences both hooks
+(auto-notifications) and CLI calls, and overrides any push mode.
 
 ## How It Works
 
@@ -215,7 +224,10 @@ npx @zeph-to/cli <command>
 |---------|-------------|
 | `/zeph-mute` | Mute notifications for this project |
 | `/zeph-unmute` | Re-enable notifications |
-| `/zeph-status` | Check mute status |
+| `/zeph-status` | Check mute + push-mode status |
+| `/zeph-quiet` | Push mode: only high-priority pushes |
+| `/zeph-loud` | Push mode: push on every turn |
+| `/zeph-normal` | Push mode: restore the default |
 
 ## Agent Support Matrix
 

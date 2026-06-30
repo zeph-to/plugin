@@ -115,7 +115,7 @@ export ZEPH_BASE_URL="https://api.zeph.to/d1"
 zeph notify --title "dev test"
 ```
 
-## Mute 메커니즘
+## Mute / Push Mode 메커니즘
 
 ```
 /zeph-mute 실행
@@ -127,7 +127,15 @@ zeph notify --title "dev test"
 
 - **Scope:** project-dir 기반 hash. 다른 프로젝트 세션은 영향 없음.
 - **생명주기:** `/tmp`에 저장 → 재부팅 시 자동 정리.
-- **커맨드:** `/zeph-mute`, `/zeph-unmute`, `/zeph-status`
+- **Mute 커맨드:** `/zeph-mute`, `/zeph-unmute`, `/zeph-status`
+
+**Push Mode** — mute와 같은 tmp-파일 패턴(`/tmp/zeph-pushmode-{hash}`)으로 Stop
+hook의 자동 푸시 볼륨을 조절. mute가 완전 침묵이라면 push mode는 그 사이 다이얼:
+
+- `/zeph-quiet` → `high` 마커만 통과 · `/zeph-loud` → 매 턴 푸시 · `/zeph-normal` → 기본
+- **우선순위:** mute > push mode > (모델의) per-turn Push Signal 마커 > 볼륨 휴리스틱.
+- Push Signal 마커(`<!-- zeph: skip|push|high -->`)는 모델이 응답에 emit → Stop hook이
+  읽어 그 턴의 푸시를 조정(읽고 본문에서 strip).
 
 ## 유저 시나리오별 가이드
 
