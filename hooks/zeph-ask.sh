@@ -48,4 +48,12 @@ BODY="$QUESTION"
 BODY="$BODY
 ↳ answer at the terminal (phone can't drive this picker)"
 
-$ZEPH_CMD notify --title "Claude asks: $PROJECT" --body "$BODY" 2>/dev/null || true
+# Default: silent on failure. Opt-in ZEPH_HOOK_DEBUG=1 logs stderr +
+# failures (the silent `2>/dev/null` otherwise hides every hook error).
+if [ -n "$ZEPH_HOOK_DEBUG" ]; then
+    ZEPH_LOG="${ZEPH_HOOK_LOG:-/tmp/zeph-hook.log}"
+    $ZEPH_CMD notify --title "Claude asks: $PROJECT" --body "$BODY" \
+        >>"$ZEPH_LOG" 2>&1 || echo "[zeph-ask] notify failed at $(date '+%Y-%m-%d %H:%M:%S')" >>"$ZEPH_LOG"
+else
+    $ZEPH_CMD notify --title "Claude asks: $PROJECT" --body "$BODY" 2>/dev/null || true
+fi

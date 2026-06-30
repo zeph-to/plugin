@@ -1,0 +1,9 @@
+{
+  "name": "zeph-plugin",
+  "version": "0.5.9",
+  "private": true,
+  "description": "Zeph Claude Code plugin — hooks, skills, and behavioral rules",
+  "scripts": {
+    "lint:rules-sync": "node scripts/lint-rules-sync.js"
+  }
+}
