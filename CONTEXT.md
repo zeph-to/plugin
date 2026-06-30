@@ -33,3 +33,12 @@ turn, overriding the volume heuristic. Three intents:
 
 When the model emits no Push Signal, the volume heuristic alone decides — so the
 plugin behaves exactly as before unless the model speaks up.
+
+### Push Mode
+A **user**-set session preference that dials the Stop-hook Push volume, sitting one
+level above the model's per-turn Push Signal. Three modes — **normal** (the default
+heuristic decides), **quiet** (only high-priority pushes survive), **loud** (every
+turn pushes) — set via `/zeph-quiet` / `/zeph-loud` / `/zeph-normal`, mirroring the
+mute mechanism. Distinct from **Mute**, which is total silence and overrides any
+Push Mode. Where they conflict, the user's Push Mode wins over the model's Push
+Signal (an explicit session preference outranks a per-turn hint).

@@ -45,14 +45,20 @@ Send a text file to the user's device.
 - `zeph_dismiss_all` — Clear all notifications
 - `zeph_broadcast` — Send notification to a channel's subscribers
 
-## Session Mute
+## Session Mute & Push Mode
 
 Users can mute notifications for the current project:
 - `/zeph-mute` — disable all notifications (hooks + MCP tools)
 - `/zeph-unmute` — re-enable notifications
-- `/zeph-status` — check current state
+- `/zeph-status` — check current state (mute + push mode)
 
 When muted, do not call any zeph MCP tools.
+
+Users can also dial the auto-push volume without full silence (a session override
+above your per-turn Push Signal; mute still overrides it):
+- `/zeph-quiet` — only high-priority pushes reach them
+- `/zeph-loud` — push on every turn
+- `/zeph-normal` — restore the default heuristic
 
 ## When NOT to Use
 

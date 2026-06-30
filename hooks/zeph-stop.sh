@@ -7,6 +7,8 @@
 #   - jq is not installed
 #   - the response already sent a zeph_ask / zeph_prompt (avoid duplicates)
 #   - a `skip` marker, or the no-marker heuristic above, says so
+#   - the user set /zeph-quiet (and this turn has no `high` marker)
+# The user can also force a push every turn with /zeph-loud.
 
 ZEPH_CMD="$(command -v zeph 2>/dev/null || echo "npx -y @zeph-to/cli")"
 
@@ -14,6 +16,14 @@ command -v jq >/dev/null 2>&1 || exit 0
 
 MUTE_HASH=$(printf '%s' "${CLAUDE_PROJECT_DIR:-$(pwd)}" | cksum | cut -d' ' -f1)
 [ -f "/tmp/zeph-muted-${MUTE_HASH}" ] && exit 0
+
+# User push-mode dial (a level above the model's per-turn Push Signal marker):
+#   quiet — suppress every auto-push except a `high` marker
+#   loud  — push every turn, overriding skip / <2-tool / read-only
+# Absent or unrecognised → normal (the marker + heuristic gate decides). Set via
+# the /zeph-quiet|/zeph-loud|/zeph-normal skills, mirroring /zeph-mute.
+PUSHMODE=""
+[ -f "/tmp/zeph-pushmode-${MUTE_HASH}" ] && PUSHMODE=$(tr -d '[:space:]' < "/tmp/zeph-pushmode-${MUTE_HASH}" 2>/dev/null)
 
 INPUT=$(cat)
 TRANSCRIPT=$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty')
@@ -144,18 +154,30 @@ MARKER_RE='<!--[[:blank:]]*zeph:[[:blank:]]*(skip|push|high)[[:blank:]]*-->'
 MARKER=""
 [[ "$TEXT" =~ $MARKER_RE ]] && MARKER="${BASH_REMATCH[1]}"
 
-# ── Gate: marker overrides the volume heuristic ──────────────────────────────
-#   skip      → suppress
-#   push/high → force a push even below the heuristic (high → high priority)
-#   (no marker) → <2 tools OR all read-only → suppress; otherwise push
+# ── Gate ─────────────────────────────────────────────────────────────────────
+# A `high` marker always escalates priority, whatever the mode.
 PRIORITY=""
-case "$MARKER" in
-    skip) exit 0 ;;
-    high) PRIORITY="high" ;;
-    push) : ;;
+[ "$MARKER" = high ] && PRIORITY="high"
+
+# The user push-mode dial sits ABOVE the per-turn marker (their explicit session
+# preference wins). Only `normal` consults the marker + volume heuristic:
+#   quiet → suppress everything except a high marker
+#   loud  → push every turn (override skip / <2 / read-only); dedup still wins
+#           because ALREADY_ASKED exited earlier
+#   normal → marker overrides the heuristic:
+#            skip → suppress; push/high → push; else <2 tools OR all read-only → suppress
+case "$PUSHMODE" in
+    quiet) [ "$MARKER" = high ] || exit 0 ;;
+    loud)  : ;;
     *)
-        [ "$TOOL_COUNT" -lt 2 ] && exit 0
-        [ "$NONREADONLY_COUNT" -eq 0 ] && exit 0
+        case "$MARKER" in
+            skip) exit 0 ;;
+            high|push) : ;;
+            *)
+                [ "$TOOL_COUNT" -lt 2 ] && exit 0
+                [ "$NONREADONLY_COUNT" -eq 0 ] && exit 0
+                ;;
+        esac
         ;;
 esac
 

@@ -27,7 +27,10 @@ command -v python3 >/dev/null || { echo "python3 required" >&2; exit 1; }
 [ -f "$FIXTURES/main-long-summary-ko.jsonl" ] || bash "$FIXTURES/gen-long-summary.sh" >/dev/null
 
 WORK=$(mktemp -d)
-trap 'rm -rf "$WORK"' EXIT
+# The push-mode tests below write /tmp/zeph-pushmode-<hash for "/tmp">; clean it
+# on exit so a failed run never leaves a stray mode set on the machine.
+TMP_PUSHMODE="/tmp/zeph-pushmode-$(printf '%s' /tmp | cksum | cut -d' ' -f1)"
+trap 'rm -rf "$WORK"; rm -f "$TMP_PUSHMODE"' EXIT
 STUB_DIR="$WORK/stub"
 mkdir -p "$STUB_DIR"
 
@@ -78,6 +81,12 @@ run_hook() {
       | CLAUDE_PROJECT_DIR="$project_dir" PATH="$STUB_DIR:$PATH" \
         bash "$HOOK_SCRIPT" 2>/dev/null
 }
+
+# Push-mode helpers — write/clear the per-project push-mode file the hook reads.
+# Hash matches the hook's `printf '%s' "$dir" | cksum` keying.
+pushmode_file() { printf '/tmp/zeph-pushmode-%s' "$(printf '%s' "${1:-/tmp}" | cksum | cut -d' ' -f1)"; }
+set_pushmode()   { printf '%s' "$1" > "$(pushmode_file "${2:-/tmp}")"; }
+clear_pushmode() { rm -f "$(pushmode_file "${1:-/tmp}")"; }
 
 zeph_called()   { [ -f "$WORK/last-call" ]; }
 zeph_silent()   { [ ! -f "$WORK/last-call" ]; }
@@ -251,6 +260,38 @@ echo "[marker: newline-split — NOT a valid marker (detect/strip symmetry)]"
 # Here a 1-tool turn → no marker detected → heuristic <2 → silent.
 run_hook "$FIXTURES/main-marker-newline.jsonl"
 assert "newline-split push marker is ignored (1-tool turn stays silent)" zeph_silent
+
+echo
+echo "[push mode: quiet — only a high marker survives]"
+# User dial (mirrors mute): quiet suppresses every auto-push except high.
+set_pushmode quiet
+run_hook "$FIXTURES/main-2-tools.jsonl"
+assert "quiet suppresses a normal push (mixed-tool turn)" zeph_silent
+run_hook "$FIXTURES/main-marker-high.jsonl"
+assert     "quiet still lets a high marker through" zeph_called
+assert     "high push keeps --priority"            zeph_body_has "--priority"
+run_hook "$FIXTURES/main-marker-push.jsonl"
+assert "quiet suppresses a plain push marker" zeph_silent
+clear_pushmode
+
+echo
+echo "[push mode: loud — push every turn, override skip / <2 / B1]"
+set_pushmode loud
+run_hook "$FIXTURES/main-1-tool.jsonl"
+assert "loud fires on a <2-tool turn"            zeph_called
+run_hook "$FIXTURES/main-readonly-only.jsonl"
+assert "loud fires on an all-read-only turn"     zeph_called
+run_hook "$FIXTURES/main-marker-skip.jsonl"
+assert "loud overrides a skip marker"            zeph_called
+run_hook "$FIXTURES/main-with-zeph-ask.jsonl"
+assert "loud still respects dedup (ask already pushed)" zeph_silent
+clear_pushmode
+
+echo
+echo "[push mode: cleared — back to default heuristic]"
+clear_pushmode
+run_hook "$FIXTURES/main-readonly-only.jsonl"
+assert "no mode → B1 floor applies again" zeph_silent
 
 # ── summary ────────────────────────────────────────────────────────────────
 
