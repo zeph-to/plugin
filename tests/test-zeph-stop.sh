@@ -203,6 +203,55 @@ echo "[trim cap — body never exceeds 5000 codepoints (~15000 bytes for Korean)
 run_hook "$FIXTURES/main-long-summary-ko.jsonl"
 assert_not "body stays under 15000-byte safety cap" zeph_body_bytes_gt 15000
 
+echo
+echo "[B1 read-only floor — turn whose tools are all Read/Grep/Glob → skip]"
+# Exploration noise: the #1 false-positive the old ≥2-tool gate produced.
+# No marker + every tool read-only → suppress deterministically (no model dep).
+run_hook "$FIXTURES/main-readonly-only.jsonl"
+assert "read-only-only turn stays silent" zeph_silent
+
+echo
+echo "[marker: skip — suppress a turn that WOULD fire]"
+# Read+Edit (mixed, crosses every heuristic) but the model tagged it skip.
+run_hook "$FIXTURES/main-marker-skip.jsonl"
+assert "skip marker silences a ≥2 mixed-tool turn" zeph_silent
+
+echo
+echo "[marker: push — force a push the heuristic would skip]"
+# Single Bash (force-push): 1 tool < 2 → heuristic stays silent; push marker fires.
+run_hook "$FIXTURES/main-marker-push.jsonl"
+assert     "push marker fires below the heuristic" zeph_called
+assert     "body carries the summary"              zeph_body_has "force-pushed main"
+assert_not "marker stripped from body"             zeph_body_has "<!--"
+
+echo
+echo "[marker: high — force push at high priority]"
+run_hook "$FIXTURES/main-marker-high.jsonl"
+assert     "high marker fires"             zeph_called
+assert     "push carries --priority flag"  zeph_body_has "--priority"
+assert     "priority value is high"        zeph_body_has "high"
+assert_not "marker stripped from body"     zeph_body_has "<!--"
+
+echo
+echo "[marker: malformed no-space variant — detected AND stripped (leak guard)]"
+# `<!--zeph:push-->` (no spaces). Detect and strip share one pattern, so a
+# slightly-off marker can never be detected-but-not-stripped → no plaintext leak.
+run_hook "$FIXTURES/main-marker-nospace.jsonl"
+assert     "no-space push marker still fires"   zeph_called
+assert     "body carries the summary"           zeph_body_has "release tag"
+assert_not "no-space marker stripped from body" zeph_body_has "<!--"
+assert_not "no leftover zeph token in body"     zeph_body_has "zeph:"
+
+echo
+echo "[marker: newline-split — NOT a valid marker (detect/strip symmetry)]"
+# A marker whose whitespace spans a newline is honoured by NEITHER detect nor
+# strip: MARKER_RE uses [[:blank:]] (no newline), so bash's whole-buffer match
+# and sed's line-by-line strip agree — it is simply not a marker. Guards against
+# the asymmetry where bash detects (fires) a marker sed cannot strip (leak).
+# Here a 1-tool turn → no marker detected → heuristic <2 → silent.
+run_hook "$FIXTURES/main-marker-newline.jsonl"
+assert "newline-split push marker is ignored (1-tool turn stays silent)" zeph_silent
+
 # ── summary ────────────────────────────────────────────────────────────────
 
 echo

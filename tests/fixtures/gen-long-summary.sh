@@ -12,7 +12,7 @@ cat > "$OUT" <<EOF
 {"type":"user","message":{"role":"user","content":"긴 응답 부탁"}}
 {"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"a","name":"Read","input":{}}]}}
 {"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"a","content":"x"}]}}
-{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"b","name":"Read","input":{}}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"b","name":"Edit","input":{}}]}}
 {"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"b","content":"x"}]}}
 {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":$ESCAPED}],"stop_reason":"end_turn"}}
 EOF

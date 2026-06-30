@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
-# Stop hook — push a completion notification once Claude finishes a response
-# that did real work (≥ 2 tool calls THIS TURN). Stays silent when:
+# Stop hook — push a completion notification once Claude finishes a response.
+# A Push Signal marker in the response (`<!-- zeph: skip|push|high -->`) overrides
+# the default; absent one, the turn pushes only if it did real work — ≥2 tool
+# calls AND not all read-only (Read/Grep/Glob). Stays silent when:
 #   - the project is muted
 #   - jq is not installed
 #   - the response already sent a zeph_ask / zeph_prompt (avoid duplicates)
+#   - a `skip` marker, or the no-marker heuristic above, says so
 
 ZEPH_CMD="$(command -v zeph 2>/dev/null || echo "npx -y @zeph-to/cli")"
 
@@ -78,50 +81,36 @@ def since_last_user:
       end;
 '
 
-# Count actual tool_use blocks this turn.
-TOOL_COUNT=$(jq -rs "$JQ_SINCE_USER"'
+# ── Per-turn tool tallies (one jq pass) ──────────────────────────────────────
+# Three counts drive the gate, all derived from the same tool_use list, so a
+# single jq pass emits them as one "ask tools nonreadonly" tuple:
+#   ALREADY_ASKED     — zeph_ask/zeph_prompt this turn (a push already went out)
+#   TOOL_COUNT        — total tool_use blocks
+#   NONREADONLY_COUNT — tools that are NOT read-only (Read/Grep/Glob); a turn
+#                       with zero is exploration noise the B1 floor drops.
+read ALREADY_ASKED TOOL_COUNT NONREADONLY_COUNT < <(jq -rs "$JQ_SINCE_USER"'
     since_last_user
-    | [.[]
-       | content_blocks[]
-       | select(.type == "tool_use")]
-    | length
-' "$TRANSCRIPT" 2>/dev/null)
-TOOL_COUNT=${TOOL_COUNT:-0}
-
-if [ "$TOOL_COUNT" -lt 2 ]; then
-    exit 0
-fi
-
-# Skip if the assistant already sent a zeph_ask / zeph_prompt this turn —
-# that already delivers a notification, so the Stop hook would duplicate.
-ALREADY_ASKED=$(jq -rs "$JQ_SINCE_USER"'
-    since_last_user
-    | [.[]
-       | content_blocks[]
-       | select(.type == "tool_use")
-       | .name // ""
-       | select(. == "zeph_ask" or . == "zeph_prompt")]
-    | length
+    | [.[] | content_blocks[] | select(.type == "tool_use") | .name // ""] as $tools
+    | "\($tools | map(select(. == "zeph_ask" or . == "zeph_prompt")) | length) \($tools | length) \($tools | map(select(. != "Read" and . != "Grep" and . != "Glob")) | length)"
 ' "$TRANSCRIPT" 2>/dev/null)
 ALREADY_ASKED=${ALREADY_ASKED:-0}
+TOOL_COUNT=${TOOL_COUNT:-0}
+NONREADONLY_COUNT=${NONREADONLY_COUNT:-0}
 
-if [ "$ALREADY_ASKED" -gt 0 ]; then
-    exit 0
-fi
+# Dedup: if the assistant already sent a zeph_ask / zeph_prompt this turn, that
+# already delivered a notification — never double-fire (checked before the marker
+# gate so a Push Signal can never stack a second push on top of an ask-push).
+[ "$ALREADY_ASKED" -gt 0 ] && exit 0
 
-PROJECT=$(basename "$CLAUDE_PROJECT_DIR" 2>/dev/null || echo "unknown")
-BRANCH=$(git -C "$CLAUDE_PROJECT_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "-")
-
-# Pull the last assistant text content THIS turn as the body summary.
+# Last assistant text THIS turn — needed both to read the Push Signal marker and
+# (later) as the push body.
 #
-# Timing: Claude Code fires the Stop hook a beat before it flushes the
-# turn's final assistant text line to the transcript file. A single read
-# therefore often misses the summary — it lands an instant later. Re-read
-# a few times (cheap; it's a local file) until the text appears, then
-# give up and let BODY fall back to the generic "branch — N tools" form.
-# Note this only matters for the body text: tool_use entries are written
-# as the turn runs, so TOOL_COUNT / ALREADY_ASKED above are unaffected.
-extract_summary() {
+# Timing: Claude Code fires the Stop hook a beat before it flushes the turn's
+# final assistant text. A single read often misses it — it lands an instant
+# later. Marker detection uses only a SHORT bounded wait: a fast-exit turn (skip
+# / read-only / <2 tools) must never block on a body it will never send. The
+# longer body wait runs only once a push is committed (further down).
+extract_last_text() {
     jq -rs "$JQ_SINCE_USER"'
         since_last_user
         | [.[]
@@ -134,13 +123,57 @@ extract_summary() {
     ' "$TRANSCRIPT" 2>/dev/null
 }
 
-SUMMARY=$(extract_summary)
+TEXT=$(extract_last_text)
+marker_tries=0
+while [ -z "$TEXT" ] && [ "$marker_tries" -lt 3 ]; do
+    sleep 0.15
+    TEXT=$(extract_last_text)
+    marker_tries=$((marker_tries + 1))
+done
+
+# Push Signal — the model steers this turn's push by emitting a marker. ONE
+# pattern drives BOTH detect (bash `[[ =~ ]]`) and strip (`sed`), so a
+# slightly-malformed marker can never be detected-but-not-stripped (which would
+# leak the raw `<!-- zeph: ... -->` into the plaintext push body). The gaps use
+# `[[:blank:]]` (space/tab only, NOT newline) on purpose: bash matches the whole
+# multiline text in one buffer while sed works line-by-line, so a newline-spanning
+# class would let bash detect a marker sed can't strip. With `[[:blank:]]` neither
+# spans a newline, so detection and stripping stay symmetric. The rule emits a
+# single-line lowercase marker, so no newline or case-insensitive matching needed.
+MARKER_RE='<!--[[:blank:]]*zeph:[[:blank:]]*(skip|push|high)[[:blank:]]*-->'
+MARKER=""
+[[ "$TEXT" =~ $MARKER_RE ]] && MARKER="${BASH_REMATCH[1]}"
+
+# ── Gate: marker overrides the volume heuristic ──────────────────────────────
+#   skip      → suppress
+#   push/high → force a push even below the heuristic (high → high priority)
+#   (no marker) → <2 tools OR all read-only → suppress; otherwise push
+PRIORITY=""
+case "$MARKER" in
+    skip) exit 0 ;;
+    high) PRIORITY="high" ;;
+    push) : ;;
+    *)
+        [ "$TOOL_COUNT" -lt 2 ] && exit 0
+        [ "$NONREADONLY_COUNT" -eq 0 ] && exit 0
+        ;;
+esac
+
+PROJECT=$(basename "$CLAUDE_PROJECT_DIR" 2>/dev/null || echo "unknown")
+BRANCH=$(git -C "$CLAUDE_PROJECT_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "-")
+
+# A push is now committed. Extend the wait for the body text — the late flush
+# this targets only matters here, for turns that actually push.
+SUMMARY="$TEXT"
 summary_tries=0
 while [ -z "$SUMMARY" ] && [ "$summary_tries" -lt 5 ]; do
     sleep 0.2
-    SUMMARY=$(extract_summary)
+    SUMMARY=$(extract_last_text)
     summary_tries=$((summary_tries + 1))
 done
+
+# Strip the marker from the body with the SAME pattern used to detect it.
+[ -n "$SUMMARY" ] && SUMMARY=$(printf '%s' "$SUMMARY" | sed -E "s/$MARKER_RE//g")
 
 # Match the original 0.4.0 behavior of passing the full assistant summary
 # through to `zeph notify`. The CLI itself decides what to do with long
@@ -190,14 +223,19 @@ fi
 SESSION_FLAG=""
 [ -n "$SESSION_ID" ] && SESSION_FLAG="--session $SESSION_ID"
 
+# A `high` Push Signal escalates the push priority; skip/push/none leave the CLI
+# default (normal).
+PRIORITY_FLAG=""
+[ -n "$PRIORITY" ] && PRIORITY_FLAG="--priority $PRIORITY"
+
 # Default: stay silent on failure (a hook must never disrupt the session).
 # Opt-in: set ZEPH_HOOK_DEBUG=1 to capture stderr + failures to a log for
 # support, since the silent `2>/dev/null` otherwise hides every hook error.
 # shellcheck disable=SC2086
 if [ -n "$ZEPH_HOOK_DEBUG" ]; then
     ZEPH_LOG="${ZEPH_HOOK_LOG:-/tmp/zeph-hook.log}"
-    $ZEPH_CMD notify --title "Claude: $PROJECT" --body "$BODY" --type hook $SESSION_FLAG \
+    $ZEPH_CMD notify --title "Claude: $PROJECT" --body "$BODY" --type hook $SESSION_FLAG $PRIORITY_FLAG \
         >>"$ZEPH_LOG" 2>&1 || echo "[zeph-stop] notify failed at $(date '+%Y-%m-%d %H:%M:%S')" >>"$ZEPH_LOG"
 else
-    $ZEPH_CMD notify --title "Claude: $PROJECT" --body "$BODY" --type hook $SESSION_FLAG 2>/dev/null || true
+    $ZEPH_CMD notify --title "Claude: $PROJECT" --body "$BODY" --type hook $SESSION_FLAG $PRIORITY_FLAG 2>/dev/null || true
 fi
