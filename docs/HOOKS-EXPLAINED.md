@@ -68,10 +68,17 @@ echo $ZEPH_API_KEY
 
 **What it does:**
 - Fires after every Claude Code response
-- Counts how many tool calls were made in this response (THIS TURN ONLY)
-- If count ≥ 2: sends a push notification via the CLI
-- If count < 2: stays silent (avoids spam for simple chats)
-- Skips notification if project is muted (`/zeph-mute`)
+- Decides whether to push using a layered gate (most-specific first):
+  1. **Muted** (`/zeph-mute`) → always silent
+  2. **Push mode** (user dial): `/zeph-quiet` → push only on a `high` marker;
+     `/zeph-loud` → push every turn; `/zeph-normal` (default) → fall through
+  3. **Push Signal marker** the model may emit in its response —
+     `<!-- zeph: skip -->` suppress, `<!-- zeph: push -->` force, `<!-- zeph: high -->`
+     force + high priority (the marker is stripped from the push body)
+  4. **Volume heuristic** (no marker): push only if ≥ 2 tool calls AND not all
+     read-only (Read/Grep/Glob); otherwise stay silent (avoids exploration spam)
+- Skips notification if the response already sent a `zeph_ask`/`zeph_prompt`
+  (that already notified — no double-push; a `push`/`high` marker can't override this)
 
 **When it runs:**
 - After every response Claude makes
@@ -105,12 +112,13 @@ Claude runs: [call tool 1] [call tool 2] → response "Built and committed."
   ↓
 Stop hook fires:
   1. Check mute file → not muted ✓
-  2. Check jq installed → yes ✓
-  3. Read transcript
-  4. Find last real user message (index N)
-  5. Count tool_use entries from index N to end → 2 tools ✓
-  6. Count zeph_ask calls → 0 (no duplicate) ✓
-  7. Run: `zeph notify --title "Task done" --body "build · main"`
+  2. Check push mode → normal (no /zeph-quiet|/zeph-loud) ✓
+  3. Check jq installed → yes ✓
+  4. Read transcript; find last real user message (index N)
+  5. Count zeph_ask calls → 0 (no duplicate) ✓
+  6. Read the Push Signal marker → none
+  7. Count tool_use from index N → 2 tools, ≥1 non-read-only ✓
+  8. Run: `zeph notify --title "Task done" --body "build · main"`
   ↓
 User gets push on phone: "Task done — build · main"
 ```
@@ -147,7 +155,9 @@ jq -r '.[] | select(.role=="assistant") | .message.content? // empty' \
 ```
 
 **Why sometimes silent:**
-- Tool count < 2 (simple response, no work)
+- Tool count < 2, or all tools were read-only (Read/Grep/Glob), with no marker
+- The response emitted a `<!-- zeph: skip -->` Push Signal
+- Push mode is `/zeph-quiet` and the turn had no `high` marker
 - jq not installed (hook exits early)
 - Project is muted (`/zeph-mute` was run)
 - Mute file still exists (stale from previous session)

@@ -29,6 +29,23 @@ Zeph lets the user drive this session from their phone. You are talking to a use
    - ✅ Example 2: Long-running operation checkpoint → `zeph_notify(title: "Tests 50% done", body: "Running for 5 min...")`
    - ✅ Example 3: Multi-session signal → `zeph_notify(title: "Session A done, Session B still building")`
 
+   **Be proactive — fire it the instant it happens, mid-task, before you continue.** On a long turn the user gets nothing until the turn ends; a blocker they learn about ten minutes late is one they couldn't act on. The moment a build breaks, a test suite goes red, or you hit something that stops progress, send the `priority: "high"` push *then* — do not batch it to the end of the response.
+
+### Push Signal — steer the end-of-turn auto-push (Stop hook)
+
+The Stop hook decides the automatic end-of-turn push by tool volume, which
+misfires both ways (spams on read-only exploration, stays silent on a small but
+important action). Override it for the current turn by emitting ONE marker
+anywhere in your response — an HTML comment, invisible in the terminal, which the
+hook strips from the push body before sending. Emit at most one; omit it to accept
+the default.
+
+- `<!-- zeph: skip -->` — suppress the push. Use when a ≥2-tool turn was not worth a ping (read several files, changed nothing the user is waiting on).
+- `<!-- zeph: push -->` — force a push the heuristic would otherwise skip. Use for a small but important action (a single force-push, a one-line deploy trigger).
+- `<!-- zeph: high -->` — force a push AND mark it high priority. Use for an important completion the user should see prominently.
+
+No marker → the default applies: a turn that ran <2 tools, or whose tools are all read-only (Read/Grep/Glob), stays silent; otherwise it pushes. The marker is lowercase and exact. It only tunes the Stop-hook push and is **ignored on any turn that already sent `zeph_ask`** (that turn already notified) — so in REMOTE, where every response ends with `zeph_ask`, the Push Signal has no effect; it is a NORMAL-mode tool.
+
 ### Common Mistakes to Avoid
 
 **Mistake 1: Manual completion notifications**
@@ -167,7 +184,7 @@ The moment the user picks an action id matching `done`/`stop`/`exit` (case-insen
 
 ### Mute / persistence
 
-12. If the user ran `/zeph-mute` for this project, the Stop and Ask hooks stay silent (driven by a tmp marker file). MCP tools still work but don't call them unless the user explicitly asks. `/zeph-unmute` lifts it.
+12. If the user ran `/zeph-mute` for this project, the Stop and Ask hooks stay silent (driven by a tmp marker file). MCP tools still work but don't call them unless the user explicitly asks. `/zeph-unmute` lifts it. The user can also dial the auto-push volume without full silence: `/zeph-quiet` (only high-priority pushes), `/zeph-loud` (push every turn), `/zeph-normal` (default). This is a session-level override above your per-turn Push Signal; `/zeph-status` shows the current mode. Mute overrides all of them.
 
 13. These rules persist for the entire session. They remain active after context compaction — do not "forget" them after many turns.
 
@@ -179,7 +196,9 @@ The moment the user picks an action id matching `done`/`stop`/`exit` (case-insen
 
 1. A Stop hook auto-notifies after responses with real work (≥2 tool calls). Do NOT call `zeph_notify` just to say "done" — it duplicates the auto-push.
 
-2. Use `zeph_notify` only for: mid-task errors that block progress, explicit long-running progress milestones, or multi-session signals. Set `priority: "high"` for blockers.
+2. Use `zeph_notify` only for: mid-task errors that block progress, explicit long-running progress milestones, or multi-session signals. Set `priority: "high"` for blockers. **Be proactive** — fire a blocker/error push the instant it happens, mid-task, not batched to the end of the response.
+
+2b. **Push Signal** — steer the Stop hook's auto-push by emitting ONE marker in your response (HTML comment; the hook strips it from the body): `<!-- zeph: skip -->` suppress, `<!-- zeph: push -->` force a push the heuristic would skip, `<!-- zeph: high -->` force a high-priority push. No marker → default (silent if <2 tools or all read-only, else push). Lowercase, exact.
 
 3. To enable remote control (buttons + free-text from the phone), the user should set `ZEPH_HOOK_ID` via `npx @zeph-to/cli setup`. You may mention this once if relevant — don't repeat it.
 
@@ -198,7 +217,8 @@ The moment the user picks an action id matching `done`/`stop`/`exit` (case-insen
 | Rule | When | Action |
 |------|------|--------|
 | **1-2: Notify** | End of response with real work | Skip `zeph_notify` (auto-push) |
-| **1-2: Notify** | Mid-task error or long-running checkpoint | Call `zeph_notify` with `priority: "high"` |
+| **1-2: Notify** | Mid-task error or long-running checkpoint | Call `zeph_notify` with `priority: "high"` — the instant it happens, not batched |
+| **Push Signal** | Steer the Stop-hook auto-push (NORMAL mode) | Emit `<!-- zeph: skip\|push\|high -->`; none = default heuristic |
 | **3: Questions** | Your response asks anything | FINAL tool call = `zeph_ask` |
 | **4: After work** | Substantial changes (files, builds, deploys) | Default = end with `zeph_ask` |
 | **4: Trivial** | Read-only, mid-plan, typo fixes | Skip `zeph_ask`, let Stop hook fire |
@@ -209,5 +229,5 @@ The moment the user picks an action id matching `done`/`stop`/`exit` (case-insen
 
 ---
 
-**Last updated**: 2026-06-26
+**Last updated**: 2026-06-30
 **Synced across**: plugin, CLAUDE.md, SKILL.md, cli/templates.ts

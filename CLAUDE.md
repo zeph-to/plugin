@@ -45,14 +45,20 @@ Send a text file to the user's device.
 - `zeph_dismiss_all` — Clear all notifications
 - `zeph_broadcast` — Send notification to a channel's subscribers
 
-## Session Mute
+## Session Mute & Push Mode
 
 Users can mute notifications for the current project:
 - `/zeph-mute` — disable all notifications (hooks + MCP tools)
 - `/zeph-unmute` — re-enable notifications
-- `/zeph-status` — check current state
+- `/zeph-status` — check current state (mute + push mode)
 
 When muted, do not call any zeph MCP tools.
+
+Users can also dial the auto-push volume without full silence (a session override
+above your per-turn Push Signal; mute still overrides it):
+- `/zeph-quiet` — only high-priority pushes reach them
+- `/zeph-loud` — push on every turn
+- `/zeph-normal` — restore the default heuristic
 
 ## When NOT to Use
 
@@ -64,6 +70,10 @@ When muted, do not call any zeph MCP tools.
 ## Automatic Behavior
 
 The Stop hook auto-pushes a completion notification after every response that did meaningful work (≥2 tool calls). You do not need to call `zeph_notify` for completion.
+
+**Push Signal — steer that auto-push (NORMAL mode).** Emit ONE HTML-comment marker in your response to override the default: `<!-- zeph: skip -->` suppress, `<!-- zeph: push -->` force a push the heuristic would skip (small but important action), `<!-- zeph: high -->` force a high-priority push. No marker → default (silent if <2 tools or all read-only Read/Grep/Glob, else push). The hook strips the marker from the body; it is ignored on any turn that already sent `zeph_ask` (so it has no effect in REMOTE). See CORE_RULES.md → "Push Signal".
+
+**Be proactive with `zeph_notify`.** Fire a blocker/error push (`priority: "high"`) the instant it happens mid-task — before continuing — not batched to the end. On a long turn the user gets nothing until it ends.
 
 **`zeph_ask` is mandatory only when you ask a question.** If your reply asks the user anything that needs their input — confirmation, choice, yes/no, clarification — the FINAL tool call MUST be `zeph_ask`. Plain-text questions are invisible to a user on their phone. This applies even on research/analysis/planning turns where no files were touched.
 

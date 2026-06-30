@@ -2,34 +2,46 @@
 name: zeph-status
 description: >
   Check Zeph notification status for this session. Shows whether notifications
-  are currently muted or active. Use before muting/unmuting to see current state.
+  are muted or active, and the current push mode (normal/quiet/loud). Use before
+  muting or changing push mode to see current state.
 metadata:
   author: zeph-to
-  version: "0.4.0"
+  version: "0.5.9"
   relatedSkills:
     - zeph
     - zeph-mute
     - zeph-unmute
+    - zeph-quiet
+    - zeph-loud
+    - zeph-normal
   triggers:
     - zeph-status
     - check zeph status
     - notification status
     - mute status
+    - push mode
     - /zeph-status
 ---
 
-Check Zeph mute status.
+Check Zeph mute + push-mode status.
 
 Run this bash command:
 
 ```bash
 HASH=$(echo -n "${CLAUDE_PROJECT_DIR:-$(pwd)}" | cksum | cut -d' ' -f1)
 if [ -f "/tmp/zeph-muted-$HASH" ]; then echo "MUTED"; else echo "ACTIVE"; fi
+MODE=$( [ -f "/tmp/zeph-pushmode-$HASH" ] && cat "/tmp/zeph-pushmode-$HASH" || echo "normal" )
+echo "PUSH MODE: $MODE"
 ```
 
 Report the result in your own words:
-- If the command printed `MUTED`: tell the user Zeph notifications are muted for this project and that `/zeph-unmute` re-enables them.
-- If it printed `ACTIVE`: tell the user Zeph notifications are active and that `/zeph-mute` silences them.
+- `MUTED` → notifications are muted for this project; `/zeph-unmute` re-enables them.
+- `ACTIVE` → notifications are active; `/zeph-mute` silences them.
+- `PUSH MODE: normal` → default (push on real work, silent on read-only).
+- `PUSH MODE: quiet` → only high-priority pushes; `/zeph-normal` restores default.
+- `PUSH MODE: loud` → every turn pushes; `/zeph-normal` restores default.
+
+(Push mode only applies when not muted — mute overrides everything.)
 
 ## If Things Go Wrong
 

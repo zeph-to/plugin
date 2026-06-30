@@ -37,6 +37,10 @@ each one would have failed before the corresponding fix landed:
 | `1-tool turn stays silent` | The basic `TOOL_COUNT < 2` gate. |
 | `turn with zeph_ask silenced` | The basic dedup that lets `zeph_ask` replace the Stop push. |
 | `muted project skips push` | The `/tmp/zeph-muted-<hash>` opt-out. |
+| `read-only floor stays silent` | The B1 floor — a turn whose tools are all Read/Grep/Glob is exploration noise and is suppressed. |
+| `marker skip / push / high` | The Push Signal — `<!-- zeph: skip\|push\|high -->` overrides the heuristic (suppress / force / force+`--priority high`); the marker is stripped from the body. |
+| `no-space + newline-split marker leak guard` | Detect and strip share one `[[:blank:]]`-based pattern, so a malformed marker can't be detected-but-not-stripped (no leak) and a newline-split marker is honoured by neither. |
+| `push mode quiet / loud` | The `/tmp/zeph-pushmode-<hash>` dial — quiet keeps only high pushes, loud pushes every turn (still respecting dedup), cleared restores the default. |
 
 ### zeph-ask.sh
 

@@ -53,7 +53,17 @@ Send a one-way push notification.
 
 **Do NOT use** to announce normal task completion — the Stop hook auto-pushes a completion notification, so calling `zeph_notify` at the end of a response duplicates it. End with `zeph_ask` (preferred) or just let the Stop hook fire.
 
+**Be proactive:** fire a blocker/error push (`priority: "high"`) the instant it occurs mid-task — not batched to the end. On a long turn the user sees nothing until the turn ends.
+
 **Format:** title under 50 chars, body under 200 chars. Include `url` for actionable links.
+
+### Push Signal — steer the auto-push (NORMAL mode)
+Override the Stop hook's end-of-turn push for the current turn by emitting ONE HTML-comment marker anywhere in your response (the hook strips it from the body):
+- `<!-- zeph: skip -->` — suppress the push (a ≥2-tool turn not worth a ping).
+- `<!-- zeph: push -->` — force a push the heuristic would skip (small but important action, e.g. a force-push).
+- `<!-- zeph: high -->` — force a high-priority push (important completion).
+
+No marker → default: silent if <2 tools or all read-only (Read/Grep/Glob), else push. Ignored on any turn that already sent `zeph_ask` (no effect in REMOTE). See CORE_RULES.md → "Push Signal".
 
 ### zeph_ask (requires ZEPH_HOOK_ID) — Preferred
 Ask the user with quick-reply buttons AND a text input field combined. Blocks until response or timeout.
