@@ -14,6 +14,10 @@ ZEPH_CMD="$(command -v zeph 2>/dev/null || echo "npx -y @zeph-to/cli")"
 
 command -v jq >/dev/null 2>&1 || exit 0
 
+# Pure decision function (zeph_gate_decide) — shared semantics with the CLI,
+# parity-locked via tests/fixtures/gate-vectors.json.
+. "$(dirname "${BASH_SOURCE[0]}")/gate.sh"
+
 MUTE_HASH=$(printf '%s' "${CLAUDE_PROJECT_DIR:-$(pwd)}" | cksum | cut -d' ' -f1)
 [ -f "/tmp/zeph-muted-${MUTE_HASH}" ] && exit 0
 
@@ -155,31 +159,14 @@ MARKER=""
 [[ "$TEXT" =~ $MARKER_RE ]] && MARKER="${BASH_REMATCH[1]}"
 
 # ── Gate ─────────────────────────────────────────────────────────────────────
-# A `high` marker always escalates priority, whatever the mode.
+# The decision lives in gate.sh (zeph_gate_decide) — a pure function shared,
+# via gate-vectors.json, with the CLI's TS twin. ALREADY_ASKED already
+# fast-exited above (before the marker wait, for latency); it is still passed
+# through so the sourced function honors the full contract on its own.
+VERDICT=$(zeph_gate_decide "$TOOL_COUNT" "$NONREADONLY_COUNT" "$ALREADY_ASKED" "${MARKER:-none}" "${PUSHMODE:-normal}")
+[ "$VERDICT" = silent ] && exit 0
 PRIORITY=""
-[ "$MARKER" = high ] && PRIORITY="high"
-
-# The user push-mode dial sits ABOVE the per-turn marker (their explicit session
-# preference wins). Only `normal` consults the marker + volume heuristic:
-#   quiet → suppress everything except a high marker
-#   loud  → push every turn (override skip / <2 / read-only); dedup still wins
-#           because ALREADY_ASKED exited earlier
-#   normal → marker overrides the heuristic:
-#            skip → suppress; push/high → push; else <2 tools OR all read-only → suppress
-case "$PUSHMODE" in
-    quiet) [ "$MARKER" = high ] || exit 0 ;;
-    loud)  : ;;
-    *)
-        case "$MARKER" in
-            skip) exit 0 ;;
-            high|push) : ;;
-            *)
-                [ "$TOOL_COUNT" -lt 2 ] && exit 0
-                [ "$NONREADONLY_COUNT" -eq 0 ] && exit 0
-                ;;
-        esac
-        ;;
-esac
+[ "$VERDICT" = "push high" ] && PRIORITY="high"
 
 PROJECT=$(basename "$CLAUDE_PROJECT_DIR" 2>/dev/null || echo "unknown")
 BRANCH=$(git -C "$CLAUDE_PROJECT_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "-")
@@ -207,6 +194,9 @@ done
 # file-upload path — the push arrived truncated with no way to read the
 # rest. This restores the 5000-codepoint cap from 0.4.0 (UTF-8 safe via
 # python3, falling through to cat if python is missing).
+# NOTE: zeph-ask.sh has a near-twin with a DIFFERENT no-python3 fallback —
+# `cat` here (empty output falls through to the default body) vs `head -c`
+# there (a hard byte cap is required). Intentionally not merged.
 trim_chars() {
     local n="$1"
     if command -v python3 >/dev/null 2>&1; then

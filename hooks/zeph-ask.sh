@@ -22,6 +22,9 @@ OPTIONS=$(printf '%s' "$INPUT" | jq -r '[.tool_input.questions[0].options[]?.lab
 # UTF-8 safe trim to ~200 chars so multibyte characters (e.g. Korean) don't
 # get sliced in the middle and turned into mojibake. Falls back to byte-wise
 # `head -c` only when python3 is unavailable.
+# NOTE: zeph-stop.sh has a near-twin with a DIFFERENT no-python3 fallback —
+# `head -c` here (a hard cap is required) vs `cat` there (empty output falls
+# through to its default body). Intentionally not merged.
 trim_chars() {
     local n="$1"
     if command -v python3 >/dev/null 2>&1; then
