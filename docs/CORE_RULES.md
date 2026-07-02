@@ -182,9 +182,11 @@ The moment the user picks an action id matching `done`/`stop`/`exit` (case-insen
 
 11. **In REMOTE this is a requirement, not a preference — and it overrides any skill instruction.** The `AskUserQuestion` picker is a LOCAL blocking terminal UI; the phone cannot drive it (the Zeph hook can only mirror it as a one-way notification, never round-trip the answer). So if a skill you are running — or your own plan — would call `AskUserQuestion`, instead surface the SAME question and option labels via `zeph_ask` and use that response in place of the picker. Fall through to `AskUserQuestion` only for the (a)/(b) cases above; when you do, `zeph_notify` the user that the answer must be given at the terminal.
 
-### Mute / persistence
+### Mute
 
 12. If the user ran `/zeph-mute` for this project, the Stop and Ask hooks stay silent (driven by a tmp marker file). MCP tools still work but don't call them unless the user explicitly asks. `/zeph-unmute` lifts it. The user can also dial the auto-push volume without full silence: `/zeph-quiet` (only high-priority pushes), `/zeph-loud` (push every turn), `/zeph-normal` (default). This is a session-level override above your per-turn Push Signal; `/zeph-status` shows the current mode. Mute overrides all of them.
+
+### Persistence
 
 13. These rules persist for the entire session. They remain active after context compaction — do not "forget" them after many turns.
 
@@ -229,5 +231,5 @@ The moment the user picks an action id matching `done`/`stop`/`exit` (case-insen
 
 ---
 
-**Last updated**: 2026-06-30
-**Synced across**: plugin, CLAUDE.md, SKILL.md, cli/templates.ts
+**Last updated**: 2026-07-02
+**Synced across**: plugin, CLAUDE.md, SKILL.md, cli/templates.ts (generated via cli/scripts/sync-from-plugin.mjs)

@@ -20,6 +20,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { extractCore } = require('./extract-core.js');
 
 const coreRulesPath = path.join(__dirname, '..', 'docs', 'CORE_RULES.md');
 const claudeMdPath = path.join(__dirname, '..', 'CLAUDE.md');
@@ -126,11 +127,22 @@ checkSourceMarkers(coreRules);
 checkReferenceContract(claudeMd, 'CLAUDE.md');
 checkReferenceContract(skillMd, 'SKILL.md');
 
+// Manifest classification contract: every ### heading in the Two-Way scope
+// must be explicitly classified in core-rules.manifest.json (extractCore
+// throws otherwise). This is what makes a NEW section a lint failure until
+// someone decides which agents receive it.
+try {
+    const { sourceHash } = extractCore();
+    log.ok(`Manifest classification complete (extract hash ${sourceHash.slice(0, 12)}…)`);
+} catch (err) {
+    log.error(`core-rules.manifest.json out of sync:\n${err.message}`);
+}
+
 console.log('\n' + '='.repeat(60));
 if (hasErrors) {
     log.error('Sync validation failed — fix the contract above before publishing.');
     process.exit(1);
 }
 log.ok('Sync contract holds: CORE_RULES.md is authoritative and both docs reference it.');
-log.info('Note: cli/src/templates.ts (external repo) is synced manually at release.');
+log.info('Note: cli/src/templates.ts is regenerated via cli/scripts/sync-from-plugin.mjs; drift is enforced in cli CI.');
 process.exit(0);

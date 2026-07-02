@@ -1,0 +1,51 @@
+{
+  "$comment": "Declarative map of CORE_RULES.md Two-Way sections to downstream rule audiences. Consumed by scripts/extract-core.js (which cli/scripts/sync-from-plugin.mjs runs to regenerate cli/src/zeph-core.generated.ts). Every `###` heading inside the scope MUST appear here — the extractor fails on an unclassified heading, so adding a new section to CORE_RULES.md forces an explicit decision. audiences: 'hook-driven' = agents with a Stop-equivalent hook (Cursor, Windsurf, Gemini, Codex, Copilot); 'rule-only' = agents without one (Cline, Aider). An empty audiences array is a deliberate exclusion — record why in `note`.",
+  "source": "docs/CORE_RULES.md",
+  "scope": { "start": "## Two-Way Mode", "end": "## One-Way Mode" },
+  "sections": [
+    {
+      "heading": "### Notification discipline",
+      "audiences": [],
+      "note": "Replaced by the per-agent notify preambles in cli/src/templates.ts (HOOK_DRIVEN_NOTIFY / MANUAL_NOTIFY) — the discipline differs by hook presence."
+    },
+    {
+      "heading": "### Push Signal — steer the end-of-turn auto-push (Stop hook)",
+      "audiences": [],
+      "note": "ADR-0001: rule-only agents never get this (no hook to honor markers); hook-driven agents only once their hooks extract markers from the response — flip to [\"hook-driven\"] when per-agent marker adapters land."
+    },
+    {
+      "heading": "### Common Mistakes to Avoid",
+      "audiences": [],
+      "note": "Claude Code-flavored examples (AskUserQuestion); the load-bearing rules are restated in the sections below."
+    },
+    {
+      "heading": "### When zeph_ask is MANDATORY",
+      "audiences": ["hook-driven", "rule-only"]
+    },
+    {
+      "heading": "### When zeph_ask is the DEFAULT (substantial work)",
+      "audiences": ["hook-driven", "rule-only"]
+    },
+    {
+      "heading": "### Handling the response",
+      "audiences": ["hook-driven", "rule-only"]
+    },
+    {
+      "heading": "### Sticky REMOTE mode (Rule 9)",
+      "audiences": ["hook-driven", "rule-only"]
+    },
+    {
+      "heading": "### When to use AskUserQuestion vs zeph_ask",
+      "audiences": ["hook-driven", "rule-only"]
+    },
+    {
+      "heading": "### Mute",
+      "audiences": [],
+      "note": "/zeph-mute etc. are Claude Code slash commands; other agents have no equivalent dial UI."
+    },
+    {
+      "heading": "### Persistence",
+      "audiences": ["hook-driven", "rule-only"]
+    }
+  ]
+}

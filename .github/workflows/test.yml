@@ -17,3 +17,6 @@ jobs:
 
       - name: Run hook tests
         run: bash tests/run-all.sh
+
+      - name: Validate rules-sync contract
+        run: node scripts/lint-rules-sync.js
