@@ -70,12 +70,14 @@ zeph_ask({
 })
 ```
 
-**Mistake 3: Using AskUserQuestion in REMOTE**
+**Mistake 3: Using AskUserQuestion for a button-friendly question while a hookId is set**
 ```javascript
-// ❌ WRONG in REMOTE — phone can't drive terminal UI
+// ❌ WRONG whenever ZEPH_HOOK_ID is set (NOT just in REMOTE) —
+//    the phone can't drive the terminal picker; it gets a dead
+//    "answer at the terminal" notification.
 AskUserQuestion({ prompt: "Which option?" })
 
-// ✅ CORRECT in REMOTE
+// ✅ CORRECT — route the choice to buttons the phone can tap
 zeph_ask({
   title: "Which option?",
   actions: [
@@ -178,9 +180,11 @@ The moment the user picks an action id matching `done`/`stop`/`exit` (case-insen
 
 ### When to use AskUserQuestion vs zeph_ask
 
-10. Prefer `zeph_ask` for short remote-friendly questions. Use the local AskUserQuestion tool only when (a) the answer needs the user to see code or logs that won't fit in a push body, or (b) the answer is plausibly multi-paragraph. `zeph_ask` should be the default while a hookId is set.
+10. **Whenever `ZEPH_HOOK_ID` is set, a button-friendly question MUST go through `zeph_ask`, not `AskUserQuestion` — and this is NOT gated on REMOTE.** "Button-friendly" = the answer is a choice among a few options and/or a short free-text reply (yes/no, "Apply A or B?", "which naming rule?", "proceed?"). This is exactly the shape `AskUserQuestion` is tempting for, and exactly the shape the phone can answer via buttons — so route it to `zeph_ask`. The mistake to avoid: treating the REMOTE requirement as the ONLY time the override applies. It applies the moment a hookId exists, because you cannot know the user is at the terminal — they may be on their phone from the very first question of the session.
 
-11. **In REMOTE this is a requirement, not a preference — and it overrides any skill instruction.** The `AskUserQuestion` picker is a LOCAL blocking terminal UI; the phone cannot drive it (the Zeph hook can only mirror it as a one-way notification, never round-trip the answer). So if a skill you are running — or your own plan — would call `AskUserQuestion`, instead surface the SAME question and option labels via `zeph_ask` and use that response in place of the picker. Fall through to `AskUserQuestion` only for the (a)/(b) cases above; when you do, `zeph_notify` the user that the answer must be given at the terminal.
+    Fall through to the local `AskUserQuestion` picker ONLY when (a) the answer needs the user to see code or logs that won't fit in a push body, or (b) the answer is plausibly multi-paragraph. Those are the only carve-outs.
+
+11. **This overrides any skill instruction.** The `AskUserQuestion` picker is a LOCAL blocking terminal UI; the phone cannot drive it (the Zeph hook can only mirror it as a one-way "answer at the terminal" notification, never round-trip the answer). So if a skill you are running — or your own plan — would call `AskUserQuestion` with a button-friendly question, instead surface the SAME question and option labels via `zeph_ask` and use that response in place of the picker. Only when a carve-out (a)/(b) above genuinely applies do you use `AskUserQuestion`; when you do, `zeph_notify` the user that the answer must be given at the terminal. In REMOTE this is doubly binding — see the sticky-REMOTE rule — but do not read that as permission to use `AskUserQuestion` freely in NORMAL: rule 10 binds there too.
 
 ### Mute
 
@@ -231,5 +235,5 @@ The moment the user picks an action id matching `done`/`stop`/`exit` (case-insen
 
 ---
 
-**Last updated**: 2026-07-02
+**Last updated**: 2026-07-03
 **Synced across**: plugin, CLAUDE.md, SKILL.md, cli/templates.ts (generated via cli/scripts/sync-from-plugin.mjs)
