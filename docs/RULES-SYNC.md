@@ -19,9 +19,11 @@ This file is the authoritative source and is read by:
    - Should reference or mirror `CORE_RULES.md`
    - User-discoverable documentation
 
-4. **CLI Templates** (`cli/src/templates.ts` → `ZEPH_CORE`)
+4. **CLI Templates** (`cli/src/zeph-core.generated.ts`, consumed by `cli/src/templates.ts`)
    - Shared across 7 agents (Cursor, Windsurf, Gemini, Codex, Copilot, Cline, Aider)
-   - Needs manual sync during releases
+   - GENERATED: `cli/scripts/sync-from-plugin.mjs` runs this repo's
+     `scripts/extract-core.js` (driven by `scripts/core-rules.manifest.json`)
+     and rewrites the generated file; cli CI fails on drift
 
 ## Why This Matters
 
@@ -38,32 +40,37 @@ This file is the authoritative source and is read by:
 ### When you change rules
 
 1. **Edit `CORE_RULES.md`** — this is the only file you need to change
-2. **Verify the change**:
+2. **If you added or renamed a `###` section** in the Two-Way scope, classify it
+   in `scripts/core-rules.manifest.json` (`audiences: [...]`, or `[]` + `note`
+   for a deliberate exclusion). The linter fails on unclassified headings.
+3. **Verify the change**:
    ```bash
-   node plugin/scripts/lint-rules-sync.js
+   node scripts/lint-rules-sync.js
    ```
-3. **Update CLAUDE.md & SKILL.md** — these should reference the new rule, not duplicate it
+4. **Update CLAUDE.md & SKILL.md** — these should reference the new rule, not duplicate it
    - Add a link: "See Rule 3 in [CORE_RULES.md](../docs/CORE_RULES.md)"
    - Or, if skill-specific: extract the relevant rule with attribution
-4. **Update cli/src/templates.ts** — manual sync needed for multi-agent support
-   - Extract `CORE_RULES.md` sections into `ZEPH_CORE`
-   - This happens during release prep
-5. **Update "Last updated" timestamp** in CORE_RULES.md
+5. **Regenerate the cli mirror** — in the sibling cli checkout:
+   ```bash
+   cd ../cli && npm run sync:plugin
+   ```
+   Commit the regenerated `src/zeph-core.generated.ts` there. cli CI
+   cross-checks against this repo and fails on drift.
+6. **Update "Last updated" timestamp** in CORE_RULES.md
 
 ### CI/Release Checklist
 
 Before publishing a new version:
 
 ```bash
-# Validate sync
+# Validate sync (reference contract + manifest classification)
 npm run lint:rules-sync
 
 # Verify CLAUDE.md references CORE_RULES.md (not hardcoded)
-grep -n "See.*CORE_RULES" plugin/CLAUDE.md
+grep -n "See.*CORE_RULES" CLAUDE.md
 
-# Verify cli/src/templates.ts mirrors current rules
-diff <(node -e "console.log(require('./plugin/docs/CORE_RULES.md'))") \
-     <(grep -A 100 "ZEPH_CORE =" cli/src/templates.ts)
+# Regenerate + verify the cli mirror (sibling checkout)
+cd ../cli && npm run sync:plugin -- --check
 
 # Update version & changelog
 npm version patch
@@ -75,8 +82,8 @@ npm version patch
 - ✅ zeph-setup.js reads from CORE_RULES.md at runtime
 - ✅ CLAUDE.md — references CORE_RULES.md (condensed quick-reference, backref enforced by linter)
 - ✅ SKILL.md — references CORE_RULES.md (condensed guidance, backref enforced by linter)
-- ⏳ cli/src/templates.ts — needs sync during next release (external repo, manual)
-- ✅ lint-rules-sync.js validates the reference contract (exit 1 on breakage; `npm run lint:rules-sync`)
+- ✅ cli/src/zeph-core.generated.ts — regenerated via `cli/scripts/sync-from-plugin.mjs`; drift enforced in cli CI (cross-repo checkout + `--check`)
+- ✅ lint-rules-sync.js validates the reference contract AND manifest classification (exit 1 on breakage; `npm run lint:rules-sync`)
 
 ## Example: Adding a New Rule
 
@@ -98,22 +105,17 @@ npm version patch
 
 4. Update SKILL.md similarly.
 
-5. Before next release, sync cli/src/templates.ts:
-   ```typescript
-   const ZEPH_CORE = `
-   ...
-   12. New rule text here...
-   `;
+5. Classify the new section in `scripts/core-rules.manifest.json`, then
+   regenerate the cli mirror:
+   ```bash
+   cd ../cli && npm run sync:plugin
    ```
 
 ## Files Modified
 
 - **Created**: `plugin/docs/CORE_RULES.md` (authoritative rules)
 - **Created**: `plugin/scripts/lint-rules-sync.js` (validation script)
+- **Created**: `plugin/scripts/core-rules.manifest.json` (section → audience map)
+- **Created**: `plugin/scripts/extract-core.js` (manifest-driven extractor)
 - **Created**: `plugin/docs/RULES-SYNC.md` (this file)
 - **Modified**: `plugin/hooks/zeph-setup.js` (now reads CORE_RULES.md)
-
-## Next Steps
-
-1. During next release: sync `cli/src/templates.ts` `ZEPH_CORE` with CORE_RULES.md (external repo, manual)
-2. Wire `npm run lint:rules-sync` into CI (already exits 1 when the reference contract breaks)
