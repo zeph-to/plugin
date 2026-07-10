@@ -10,6 +10,8 @@ Get push notifications on your phone when your AI coding agent finishes work or 
 
 Works with Claude Code, Gemini CLI, Cursor, Windsurf, and more.
 
+Built on [`@zeph-to/cli`](https://github.com/zeph-to/cli) (installer, hooks, tmux remote control) and [`@zeph-to/mcp-server`](https://github.com/zeph-to/mcp-server) (the `zeph_ask` family of MCP tools), paired with the [Zeph app](https://zeph.to) on your phone.
+
 ## Quick Start (Claude Code)
 
 ```bash
@@ -171,7 +173,7 @@ zeph-to/plugin (Claude Code plugin)
 npx @zeph-to/cli install
 ```
 
-Detects installed agents, prompts for credentials, installs hooks + MCP + rules for each agent.
+Detects installed agents, prompts for credentials (opens browser sign-in when none are saved), installs hooks + MCP + rules for each agent. Already inside Claude Code? `/zeph-config` walks through the same setup conversationally.
 
 - **API Key** (required) — Open Zeph app → Settings → API Keys → Create new key
 - **Hook ID** (optional, for `zeph_ask`/`zeph_prompt`/`zeph_input`) — Settings → Developer → Hooks → Create new hook
@@ -231,6 +233,7 @@ npx @zeph-to/cli <command>
 
 | Command | Description |
 |---------|-------------|
+| `login` | Browser sign-in — auto-fetches API key + hook into `~/.zeph/config.json` |
 | `install` | One-command setup for all agents |
 | `notify --title "..." --body "..."` | Send a push |
 | `list [--limit 5] [--type note]` | List recent pushes |
@@ -241,6 +244,7 @@ npx @zeph-to/cli <command>
 
 | Command | Description |
 |---------|-------------|
+| `/zeph-config` | Guided setup: API key + Hook ID, with verification |
 | `/zeph-auto [duration] [task]` | Time-boxed autonomous work session |
 | `/zeph-mute` | Mute notifications for this project |
 | `/zeph-unmute` | Re-enable notifications |
@@ -282,6 +286,12 @@ This reverses `zeph install` for every detected agent — removing MCP entries, 
 claude plugin uninstall zeph@zeph
 rm ~/.zeph/config.json
 ```
+
+## Deep Dives
+
+- [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) — how the plugin, CLI, and MCP server fit together
+- [docs/CORE_RULES.md](./docs/CORE_RULES.md) — the authoritative behavioral rules injected at session start
+- [docs/HOOKS-EXPLAINED.md](./docs/HOOKS-EXPLAINED.md) — what each hook does and why
 
 ## License
 
