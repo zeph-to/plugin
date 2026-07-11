@@ -53,6 +53,16 @@ case "$TRANSCRIPT" in
     *observer*)    exit 0 ;;
 esac
 
+# Bound every jq pass to the transcript tail. `jq -s` parses the whole file,
+# so on a long session each Stop turn paid O(session length) — and up to ~10
+# passes on a slow-flush pushing turn. One turn's entries fit comfortably in
+# the last 2000 lines; if the last real user message falls outside the window
+# (a gigantic turn), since_last_user's null fallback treats the window as the
+# turn, and the entries that drive every decision (tool tallies, last
+# assistant text) live at the tail anyway.
+TAIL_LINES=2000
+read_tail() { tail -n "$TAIL_LINES" "$TRANSCRIPT" 2>/dev/null; }
+
 # Scope all checks to "entries since the last *real* user message" — Claude
 # Code logs tool_results as synthetic user messages, so a naive
 # role=="user" filter would slice mid-turn.
@@ -102,11 +112,11 @@ def since_last_user:
 #   TOOL_COUNT        — total tool_use blocks
 #   NONREADONLY_COUNT — tools that are NOT read-only (Read/Grep/Glob); a turn
 #                       with zero is exploration noise the B1 floor drops.
-read ALREADY_ASKED TOOL_COUNT NONREADONLY_COUNT < <(jq -rs "$JQ_SINCE_USER"'
+read ALREADY_ASKED TOOL_COUNT NONREADONLY_COUNT < <(read_tail | jq -rs "$JQ_SINCE_USER"'
     since_last_user
     | [.[] | content_blocks[] | select(.type == "tool_use") | .name // ""] as $tools
     | "\($tools | map(select(. == "zeph_ask" or . == "zeph_prompt")) | length) \($tools | length) \($tools | map(select(. != "Read" and . != "Grep" and . != "Glob")) | length)"
-' "$TRANSCRIPT" 2>/dev/null)
+' 2>/dev/null)
 ALREADY_ASKED=${ALREADY_ASKED:-0}
 TOOL_COUNT=${TOOL_COUNT:-0}
 NONREADONLY_COUNT=${NONREADONLY_COUNT:-0}
@@ -125,7 +135,7 @@ NONREADONLY_COUNT=${NONREADONLY_COUNT:-0}
 # / read-only / <2 tools) must never block on a body it will never send. The
 # longer body wait runs only once a push is committed (further down).
 extract_last_text() {
-    jq -rs "$JQ_SINCE_USER"'
+    read_tail | jq -rs "$JQ_SINCE_USER"'
         since_last_user
         | [.[]
            | select(.message?.role == "assistant")
@@ -134,7 +144,7 @@ extract_last_text() {
            | join(" ")
            | select(. != "")]
         | last // ""
-    ' "$TRANSCRIPT" 2>/dev/null
+    ' 2>/dev/null
 }
 
 TEXT=$(extract_last_text)
