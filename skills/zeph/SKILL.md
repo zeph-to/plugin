@@ -178,11 +178,12 @@ zeph_ask(title: "Done. Next?", actions: [{id:"/review", label:"Review"}, {id:"/s
 
 ## Skill Map
 
-Zeph has 5 related skills. Here's when to use each:
+Zeph has 6 related skills. Here's when to use each:
 
 | Skill | When | Example |
 |-------|------|---------|
 | **/zeph** | You need to send notifications, ask questions, collect input | "Build done, next?", request deployment confirmation |
+| **/zeph-auto** | User starts a time-boxed autonomous work session | `/zeph-auto 2h fix the flaky tests` — loop until the budget runs out, steer via zeph_ask |
 | **/zeph-config** | Setting up Zeph for the first time, or adding Hook ID for remote control | `zeph-config` to guide through credentials & environment setup |
 | **/zeph-mute** | Too many notifications? Silence them for this session | `/zeph-mute` when working on something that doesn't need interruptions |
 | **/zeph-status** | Check whether notifications are muted or active | `/zeph-status` to see current state |

@@ -32,6 +32,10 @@ HASH=$(echo -n "${CLAUDE_PROJECT_DIR:-$(pwd)}" | cksum | cut -d' ' -f1)
 if [ -f "/tmp/zeph-muted-$HASH" ]; then echo "MUTED"; else echo "ACTIVE"; fi
 MODE=$( [ -f "/tmp/zeph-pushmode-$HASH" ] && cat "/tmp/zeph-pushmode-$HASH" || echo "normal" )
 echo "PUSH MODE: $MODE"
+if [ -f "/tmp/zeph-auto-$HASH" ]; then
+  read -r DEADLINE MINUTES < "/tmp/zeph-auto-$HASH"
+  echo "AUTO MODE: $(( (DEADLINE - $(date +%s)) / 60 ))m remaining of ${MINUTES}m"
+fi
 ```
 
 Report the result in your own words:
@@ -40,6 +44,7 @@ Report the result in your own words:
 - `PUSH MODE: normal` → default (push on real work, silent on read-only).
 - `PUSH MODE: quiet` → only high-priority pushes; `/zeph-normal` restores default.
 - `PUSH MODE: loud` → every turn pushes; `/zeph-normal` restores default.
+- `AUTO MODE: ...` → a `/zeph-auto` session is running with that much budget left.
 
 (Push mode only applies when not muted — mute overrides everything.)
 

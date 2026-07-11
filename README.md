@@ -73,6 +73,25 @@ Too many notifications? Mute them, or dial the volume, for the current session:
 These create a temp file in `/tmp` — cleared on reboot. Mute silences both hooks
 (auto-notifications) and CLI calls, and overrides any push mode.
 
+## Autonomous Mode
+
+Hand Claude a time budget and walk away:
+
+```
+/zeph-auto 2h fix the flaky tests
+```
+
+Claude loops explore → plan → implement → verify → commit until the budget runs
+out, committing each verified unit on a work branch. Questions arrive on your
+phone as `zeph_ask` buttons with a stated default — answer to steer, or ignore
+and the run proceeds on the safe default after the timeout. Irreversible actions
+(push, deploy, deletion) are never taken on a timeout; they wait for an explicit
+tap. The run ends with a report of what was committed, what was skipped, and
+which decisions were auto-defaulted — plus buttons to extend, review, or finish.
+
+Duration accepts `2h`, `90m`, `1h30m`, or plain minutes (default `1h`).
+`/zeph-status` shows the remaining budget mid-run.
+
 ## How It Works
 
 ### Session Flow
@@ -222,6 +241,7 @@ npx @zeph-to/cli <command>
 
 | Command | Description |
 |---------|-------------|
+| `/zeph-auto [duration] [task]` | Time-boxed autonomous work session |
 | `/zeph-mute` | Mute notifications for this project |
 | `/zeph-unmute` | Re-enable notifications |
 | `/zeph-status` | Check mute + push-mode status |
