@@ -1,12 +1,12 @@
 ---
 name: zeph-normal
 description: >
-  Restore Zeph's DEFAULT push mode for this session — clears /zeph-quiet or
+  Restore Zeph's DEFAULT push mode for this project — clears /zeph-quiet or
   /zeph-loud so the normal heuristic (push on real work, silent on read-only)
   and the model's per-turn Push Signal decide again.
 metadata:
   author: zeph-to
-  version: "0.5.9"
+  version: "0.8.0"
   relatedSkills:
     - zeph
     - zeph-quiet
@@ -21,7 +21,7 @@ metadata:
     - /zeph-normal
 ---
 
-Restore Zeph's default push mode for this session.
+Restore Zeph's default push mode for this project (persists until undone).
 
 Run this bash command:
 

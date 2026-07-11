@@ -1,12 +1,12 @@
 ---
 name: zeph-status
 description: >
-  Check Zeph notification status for this session. Shows whether notifications
+  Check Zeph notification status for this project (persists until undone). Shows whether notifications
   are muted or active, and the current push mode (normal/quiet/loud). Use before
   muting or changing push mode to see current state.
 metadata:
   author: zeph-to
-  version: "0.5.9"
+  version: "0.8.0"
   relatedSkills:
     - zeph
     - zeph-mute

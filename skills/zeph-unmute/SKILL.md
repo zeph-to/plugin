@@ -1,11 +1,11 @@
 ---
 name: zeph-unmute
 description: >
-  Unmute Zeph push notifications for this session. Re-enables automatic
+  Unmute Zeph push notifications for this project (persists until undone). Re-enables automatic
   notifications from Stop and AskUserQuestion hooks. Use after /zeph-mute to turn them back on.
 metadata:
   author: zeph-to
-  version: "0.4.0"
+  version: "0.8.0"
   relatedSkills:
     - zeph
     - zeph-mute
@@ -18,7 +18,7 @@ metadata:
     - /zeph-unmute
 ---
 
-Unmute Zeph notifications for this session.
+Unmute Zeph notifications for this project (persists until undone).
 
 Run this bash command:
 
@@ -28,7 +28,7 @@ STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/zeph"
 rm -f "$STATE_DIR/muted-$HASH" "/tmp/zeph-muted-$HASH"   # legacy /tmp too
 ```
 
-Then confirm to the user, in your own words, that Zeph notifications are re-enabled for this session.
+Then confirm to the user, in your own words, that Zeph notifications are re-enabled for this project (persists until undone).
 
 ## If Things Go Wrong
 

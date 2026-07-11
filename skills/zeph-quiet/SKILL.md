@@ -1,13 +1,13 @@
 ---
 name: zeph-quiet
 description: >
-  Set Zeph to QUIET push mode for this session — only high-priority pushes
+  Set Zeph to QUIET push mode for this project — only high-priority pushes
   (blockers and `high` Push Signals) reach you; routine completion pushes are
   suppressed. Use /zeph-normal to restore default, /zeph-loud for everything,
   /zeph-mute for full silence.
 metadata:
   author: zeph-to
-  version: "0.5.9"
+  version: "0.8.0"
   relatedSkills:
     - zeph
     - zeph-loud
@@ -22,7 +22,7 @@ metadata:
     - /zeph-quiet
 ---
 
-Set Zeph push mode to QUIET for this session.
+Set Zeph push mode to QUIET for this project (persists until undone).
 
 Run this bash command:
 

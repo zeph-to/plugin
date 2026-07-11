@@ -6,7 +6,7 @@ description: >
   tasks, encountering errors, or needing user decisions while away from terminal.
 metadata:
   author: zeph-to
-  version: "0.5.9"
+  version: "0.8.0"
   relatedSkills:
     - zeph-config
     - zeph-mute
@@ -185,7 +185,7 @@ Zeph has 6 related skills. Here's when to use each:
 | **/zeph** | You need to send notifications, ask questions, collect input | "Build done, next?", request deployment confirmation |
 | **/zeph-auto** | User starts a time-boxed autonomous work session | `/zeph-auto 2h fix the flaky tests` — loop until the budget runs out, steer via zeph_ask |
 | **/zeph-config** | Setting up Zeph for the first time, or adding Hook ID for remote control | `zeph-config` to guide through credentials & environment setup |
-| **/zeph-mute** | Too many notifications? Silence them for this session | `/zeph-mute` when working on something that doesn't need interruptions |
+| **/zeph-mute** | Too many notifications? Silence them for this project (until unmuted) | `/zeph-mute` when working on something that doesn't need interruptions |
 | **/zeph-status** | Check whether notifications are muted or active | `/zeph-status` to see current state |
 | **/zeph-unmute** | Re-enable notifications after muting | `/zeph-unmute` to turn them back on |
 

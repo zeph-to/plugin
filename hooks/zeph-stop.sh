@@ -268,6 +268,13 @@ if [ -z "$SESSION_ID" ]; then
     ZEPH_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/zeph"
     SESSION_ID=$(cat "$ZEPH_CACHE_DIR/session-${MUTE_HASH}" 2>/dev/null \
               || cat "/tmp/zeph-session-${MUTE_HASH}" 2>/dev/null)
+    # The fallback value expands unquoted into the CLI argv below — validate
+    # it so a tampered cache file (the /tmp one is world-writable-parent
+    # legacy) can never inject extra arguments. Session ids are sess_* tokens
+    # or UUIDs; allow only those shapes.
+    case "$SESSION_ID" in
+        *[!A-Za-z0-9_-]*) SESSION_ID="" ;;
+    esac
 fi
 SESSION_FLAG=""
 [ -n "$SESSION_ID" ] && SESSION_FLAG="--session $SESSION_ID"

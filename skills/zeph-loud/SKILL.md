@@ -1,13 +1,13 @@
 ---
 name: zeph-loud
 description: >
-  Set Zeph to LOUD push mode for this session — push on every turn, overriding
+  Set Zeph to LOUD push mode for this project — push on every turn, overriding
   the usual silence on read-only / sub-threshold turns and `skip` Push Signals.
   Use /zeph-normal to restore default, /zeph-quiet for important-only, /zeph-mute
   for silence.
 metadata:
   author: zeph-to
-  version: "0.5.9"
+  version: "0.8.0"
   relatedSkills:
     - zeph
     - zeph-quiet
@@ -22,7 +22,7 @@ metadata:
     - /zeph-loud
 ---
 
-Set Zeph push mode to LOUD for this session.
+Set Zeph push mode to LOUD for this project (persists until undone).
 
 Run this bash command:
 

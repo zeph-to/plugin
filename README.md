@@ -60,7 +60,7 @@ With `ZEPH_HOOK_ID` configured, Claude prefers `zeph_ask` for decisions and inpu
 
 ## Mute & Push Mode
 
-Too many notifications? Mute them, or dial the volume, for the current session:
+Too many notifications? Mute them, or dial the volume, for the current project:
 
 ```
 /zeph-mute      — Disable all notifications for this project
