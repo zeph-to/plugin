@@ -12,6 +12,16 @@
 
 ZEPH_CMD="$(command -v zeph 2>/dev/null || echo "npx -y @zeph-to/cli")"
 
+# Bound the CLI call below the 10s hooks.json cap — a cold `npx -y` resolve
+# or a hung network otherwise eats the whole hook budget and the push is
+# silently lost. macOS ships no `timeout` in the base system (gtimeout via
+# coreutils); without either, the hooks.json cap still applies.
+if command -v timeout >/dev/null 2>&1; then
+    ZEPH_CMD="timeout 8 $ZEPH_CMD"
+elif command -v gtimeout >/dev/null 2>&1; then
+    ZEPH_CMD="gtimeout 8 $ZEPH_CMD"
+fi
+
 command -v jq >/dev/null 2>&1 || exit 0
 
 # Pure decision function (zeph_gate_decide) — shared semantics with the CLI,
