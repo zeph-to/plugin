@@ -66,8 +66,6 @@ corrupted or partially installed. Reinstall with:
   claude plugin uninstall zeph@zeph && claude plugin marketplace add zeph-to/plugin`;
 }
 
-const mode_label = hookId ? 'Mode: two-way (notify + ask + prompt + input)' : 'Mode: one-way (notify only)';
-
 // Extract the appropriate section from CORE_RULES.md
 const extractRulesSection = (isTwoWay) => {
     const lines = coreRules.split('\n');
@@ -83,7 +81,7 @@ const extractRulesSection = (isTwoWay) => {
         if (inSection) result.push(line);
     }
 
-    return (result.join('\n').trim() + '\n\nMode: ' + mode_label).trim();
+    return (result.join('\n').trim() + '\n\nMode: ' + mode).trim();
 };
 
 const rulesTwoWay = `# Zeph — Remote-Control Rules (active every response)
