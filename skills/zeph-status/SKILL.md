@@ -31,6 +31,7 @@ Run this bash command:
 HASH=$(printf '%s' "${CLAUDE_PROJECT_DIR:-$(pwd)}" | cksum | cut -d' ' -f1)
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/zeph"
 # Legacy /tmp files (older versions) count only when owned by the current user.
+# Canonical resolution lives in hooks/gate.sh zeph_state_present — keep in sync.
 if [ -f "$STATE_DIR/muted-$HASH" ] || { [ -f "/tmp/zeph-muted-$HASH" ] && [ -O "/tmp/zeph-muted-$HASH" ]; }; then
   echo "MUTED"
 else

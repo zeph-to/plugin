@@ -12,41 +12,17 @@
 
 ZEPH_CMD="$(command -v zeph 2>/dev/null || echo "npx -y @zeph-to/cli")"
 
-# Bound the CLI call below the 10s hooks.json cap — a cold `npx -y` resolve
-# or a hung network otherwise eats the whole hook budget and the push is
-# silently lost. macOS ships no `timeout` in the base system (gtimeout via
-# coreutils); without either, the hooks.json cap still applies.
-if command -v timeout >/dev/null 2>&1; then
-    ZEPH_CMD="timeout 8 $ZEPH_CMD"
-elif command -v gtimeout >/dev/null 2>&1; then
-    ZEPH_CMD="gtimeout 8 $ZEPH_CMD"
-fi
-
 command -v jq >/dev/null 2>&1 || exit 0
 
-# Pure decision function (zeph_gate_decide) — shared semantics with the CLI,
-# parity-locked via tests/fixtures/gate-vectors.json.
+# Shared hook library: the pure gate decision (parity-locked to the CLI via
+# tests/fixtures/gate-vectors.json) plus state-file + CLI-bounding helpers.
 . "$(dirname "${BASH_SOURCE[0]}")/gate.sh"
+
+ZEPH_CMD=$(zeph_wrap_timeout "$ZEPH_CMD")
 
 MUTE_HASH=$(printf '%s' "${CLAUDE_PROJECT_DIR:-$(pwd)}" | cksum | cut -d' ' -f1)
 
-# Mute/push-mode state lives under a per-user dir. It used to sit at
-# predictable names in world-writable /tmp, where any local user could
-# pre-create a victim's mute file (sticky /tmp makes it un-deletable by the
-# victim). Legacy /tmp files are still honored during migration, but only
-# when owned by the current user (-O), which neutralizes planted files.
-ZEPH_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/zeph"
-zeph_state_present() { # $1 = kind (muted|pushmode); echoes the live path, rc 1 if none
-    if [ -f "$ZEPH_STATE_DIR/$1-${MUTE_HASH}" ]; then
-        echo "$ZEPH_STATE_DIR/$1-${MUTE_HASH}"
-    elif [ -f "/tmp/zeph-$1-${MUTE_HASH}" ] && [ -O "/tmp/zeph-$1-${MUTE_HASH}" ]; then
-        echo "/tmp/zeph-$1-${MUTE_HASH}"
-    else
-        return 1
-    fi
-}
-
-zeph_state_present muted >/dev/null && exit 0
+zeph_state_present muted "$MUTE_HASH" >/dev/null && exit 0
 
 # User push-mode dial (a level above the model's per-turn Push Signal marker):
 #   quiet — suppress every auto-push except a `high` marker
@@ -54,7 +30,7 @@ zeph_state_present muted >/dev/null && exit 0
 # Absent or unrecognised → normal (the marker + heuristic gate decides). Set via
 # the /zeph-quiet|/zeph-loud|/zeph-normal skills, mirroring /zeph-mute.
 PUSHMODE=""
-PUSHMODE_FILE=$(zeph_state_present pushmode) && PUSHMODE=$(tr -d '[:space:]' < "$PUSHMODE_FILE" 2>/dev/null)
+PUSHMODE_FILE=$(zeph_state_present pushmode "$MUTE_HASH") && PUSHMODE=$(tr -d '[:space:]' < "$PUSHMODE_FILE" 2>/dev/null)
 
 INPUT=$(cat)
 TRANSCRIPT=$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty')
@@ -139,7 +115,10 @@ def since_last_user:
 #   TOOL_COUNT        — total tool_use blocks
 #   NONREADONLY_COUNT — tools that are NOT read-only (Read/Grep/Glob); a turn
 #                       with zero is exploration noise the B1 floor drops.
-read ALREADY_ASKED TOOL_COUNT NONREADONLY_COUNT < <(read_tail | jq -rs "$JQ_SINCE_USER"'
+# One tail read feeds both the tally and the first text extraction below —
+# the retry loops re-read because they poll for late-flushed content.
+TAIL_CONTENT=$(read_tail)
+read ALREADY_ASKED TOOL_COUNT NONREADONLY_COUNT < <(printf '%s\n' "$TAIL_CONTENT" | jq -rs "$JQ_SINCE_USER"'
     since_last_user
     | [.[] | content_blocks[] | select(.type == "tool_use") | .name // ""] as $tools
     | "\($tools | map(select(. == "zeph_ask" or . == "zeph_prompt")) | length) \($tools | length) \($tools | map(select(. != "Read" and . != "Grep" and . != "Glob")) | length)"
@@ -161,8 +140,9 @@ NONREADONLY_COUNT=${NONREADONLY_COUNT:-0}
 # later. Marker detection uses only a SHORT bounded wait: a fast-exit turn (skip
 # / read-only / <2 tools) must never block on a body it will never send. The
 # longer body wait runs only once a push is committed (further down).
+# Reads the transcript tail from stdin (pipe read_tail or a captured copy).
 extract_last_text() {
-    read_tail | jq -rs "$JQ_SINCE_USER"'
+    jq -rs "$JQ_SINCE_USER"'
         since_last_user
         | [.[]
            | select(.message?.role == "assistant")
@@ -174,11 +154,11 @@ extract_last_text() {
     ' 2>/dev/null
 }
 
-TEXT=$(extract_last_text)
+TEXT=$(printf '%s\n' "$TAIL_CONTENT" | extract_last_text)
 marker_tries=0
 while [ -z "$TEXT" ] && [ "$marker_tries" -lt 3 ]; do
     sleep 0.15
-    TEXT=$(extract_last_text)
+    TEXT=$(read_tail | extract_last_text)
     marker_tries=$((marker_tries + 1))
 done
 
@@ -214,7 +194,7 @@ SUMMARY="$TEXT"
 summary_tries=0
 while [ -z "$SUMMARY" ] && [ "$summary_tries" -lt 5 ]; do
     sleep 0.2
-    SUMMARY=$(extract_last_text)
+    SUMMARY=$(read_tail | extract_last_text)
     summary_tries=$((summary_tries + 1))
 done
 

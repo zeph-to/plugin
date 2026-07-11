@@ -4,26 +4,18 @@
 
 ZEPH_CMD="$(command -v zeph 2>/dev/null || echo "npx -y @zeph-to/cli")"
 
-# Bound the CLI call below the 10s hooks.json cap. This hook runs BEFORE the
-# AskUserQuestion picker appears, so a cold `npx -y` resolve or hung network
-# here directly delays the question reaching the terminal. macOS ships no
-# `timeout` in the base system (gtimeout via coreutils); without either, the
-# hooks.json cap still applies.
-if command -v timeout >/dev/null 2>&1; then
-    ZEPH_CMD="timeout 8 $ZEPH_CMD"
-elif command -v gtimeout >/dev/null 2>&1; then
-    ZEPH_CMD="gtimeout 8 $ZEPH_CMD"
-fi
-
 command -v jq >/dev/null 2>&1 || exit 0
+
+# Shared hook library (hooks/gate.sh): state-file resolution + CLI bounding.
+# Bounding matters doubly here — this hook runs BEFORE the AskUserQuestion
+# picker appears, so a cold `npx -y` resolve delays the question itself.
+. "$(dirname "${BASH_SOURCE[0]}")/gate.sh"
+
+ZEPH_CMD=$(zeph_wrap_timeout "$ZEPH_CMD")
 
 MUTE_HASH=$(printf '%s' "${CLAUDE_PROJECT_DIR:-$(pwd)}" | cksum | cut -d' ' -f1)
 
-# Mute state lives under a per-user dir (see zeph-stop.sh for the rationale);
-# a legacy /tmp file counts only when owned by the current user (-O).
-ZEPH_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/zeph"
-[ -f "$ZEPH_STATE_DIR/muted-${MUTE_HASH}" ] && exit 0
-[ -f "/tmp/zeph-muted-${MUTE_HASH}" ] && [ -O "/tmp/zeph-muted-${MUTE_HASH}" ] && exit 0
+zeph_state_present muted "$MUTE_HASH" >/dev/null && exit 0
 
 INPUT=$(cat)
 QUESTION=$(printf '%s' "$INPUT" | jq -r '.tool_input.question // .tool_input.questions[0].question // "Question pending"' 2>/dev/null)
