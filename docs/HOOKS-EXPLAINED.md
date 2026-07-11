@@ -99,7 +99,8 @@ The hook is smart about WHAT to count:
    - Result: Counts only work done SINCE the user's last input
 
 3. **Mute check**: Skips if project is muted
-   - Checks for `/tmp/zeph-muted-{hash}` file
+   - Checks for `${XDG_STATE_HOME:-~/.local/state}/zeph/muted-{hash}` (legacy
+     `/tmp/zeph-muted-{hash}` still honored when owned by the current user)
    - Hash = `cksum(project-dir)`
    - Result: `/zeph-mute` command silences notifications
 
@@ -140,11 +141,11 @@ command -v jq && echo "✓ jq installed" || echo "✗ jq missing (install: brew 
 
 Check if mute file exists:
 ```bash
-HASH=$(echo -n "$(pwd)" | cksum | cut -d' ' -f1)
-ls -la /tmp/zeph-muted-$HASH
+HASH=$(printf '%s' "$(pwd)" | cksum | cut -d' ' -f1)
+ls -la "${XDG_STATE_HOME:-$HOME/.local/state}/zeph/muted-$HASH"
 
 # If file exists, notifications are silenced. Remove to unmute:
-# rm /tmp/zeph-muted-$HASH
+# rm "${XDG_STATE_HOME:-$HOME/.local/state}/zeph/muted-$HASH"
 ```
 
 Test the hook manually:
@@ -217,8 +218,8 @@ command -v zeph || echo "npx -y @zeph-to/cli"
 echo $ZEPH_API_KEY
 
 # 3. Is the project muted?
-HASH=$(echo -n "$(pwd)" | cksum | cut -d' ' -f1)
-ls /tmp/zeph-muted-$HASH
+HASH=$(printf '%s' "$(pwd)" | cksum | cut -d' ' -f1)
+ls "${XDG_STATE_HOME:-$HOME/.local/state}/zeph/muted-$HASH"
 ```
 
 ---
@@ -268,10 +269,11 @@ echo '{"type":"tool_use"}{"type":"tool_use"}' | jq . | grep tool_use | wc -l
 echo '{"type":"tool_use","name":"AskUserQuestion","input":{"prompt":"Test?"}}' | jq '.input.prompt'
 
 # Test mute check
-HASH=$(echo -n "." | cksum | cut -d' ' -f1)
-touch /tmp/zeph-muted-$HASH && echo "✓ Mute file created"
-[ -f "/tmp/zeph-muted-$HASH" ] && echo "✓ Mute check works"
-rm /tmp/zeph-muted-$HASH
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/zeph"; mkdir -p "$STATE_DIR"
+HASH=$(printf '%s' "." | cksum | cut -d' ' -f1)
+touch "$STATE_DIR/muted-$HASH" && echo "✓ Mute file created"
+[ -f "$STATE_DIR/muted-$HASH" ] && echo "✓ Mute check works"
+rm "$STATE_DIR/muted-$HASH"
 ```
 
 ---

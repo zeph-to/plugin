@@ -72,8 +72,12 @@ Too many notifications? Mute them, or dial the volume, for the current session:
 /zeph-normal    — Restore the default (push on real work, quiet on reads)
 ```
 
-These create a temp file in `/tmp` — cleared on reboot. Mute silences both hooks
-(auto-notifications) and CLI calls, and overrides any push mode.
+These create a state file under `${XDG_STATE_HOME:-~/.local/state}/zeph`, keyed
+by project directory — it persists until you undo it (`/zeph-unmute`,
+`/zeph-normal`), including across reboots and new sessions in the same project.
+Mute silences both hooks (auto-notifications) and CLI calls, and overrides any
+push mode. Files written to `/tmp` by older versions are still honored when
+owned by you.
 
 ## Autonomous Mode
 

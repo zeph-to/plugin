@@ -18,7 +18,12 @@ fi
 command -v jq >/dev/null 2>&1 || exit 0
 
 MUTE_HASH=$(printf '%s' "${CLAUDE_PROJECT_DIR:-$(pwd)}" | cksum | cut -d' ' -f1)
-[ -f "/tmp/zeph-muted-${MUTE_HASH}" ] && exit 0
+
+# Mute state lives under a per-user dir (see zeph-stop.sh for the rationale);
+# a legacy /tmp file counts only when owned by the current user (-O).
+ZEPH_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/zeph"
+[ -f "$ZEPH_STATE_DIR/muted-${MUTE_HASH}" ] && exit 0
+[ -f "/tmp/zeph-muted-${MUTE_HASH}" ] && [ -O "/tmp/zeph-muted-${MUTE_HASH}" ] && exit 0
 
 INPUT=$(cat)
 QUESTION=$(printf '%s' "$INPUT" | jq -r '.tool_input.question // .tool_input.questions[0].question // "Question pending"' 2>/dev/null)

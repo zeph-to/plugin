@@ -27,8 +27,10 @@ Set Zeph push mode to LOUD for this session.
 Run this bash command:
 
 ```bash
-HASH=$(echo -n "${CLAUDE_PROJECT_DIR:-$(pwd)}" | cksum | cut -d' ' -f1)
-printf 'loud' > "/tmp/zeph-pushmode-$HASH"
+HASH=$(printf '%s' "${CLAUDE_PROJECT_DIR:-$(pwd)}" | cksum | cut -d' ' -f1)
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/zeph"
+mkdir -p "$STATE_DIR"
+printf 'loud' > "$STATE_DIR/pushmode-$HASH"
 ```
 
 Then confirm to the user, in your own words: every turn now sends a push —
@@ -38,7 +40,6 @@ default, `/zeph-quiet` limits to important pushes, `/zeph-mute` silences all.
 
 ## If Things Go Wrong
 
-- **Not pushing every turn**: verify — `ls -la /tmp/zeph-pushmode-*` (should
-  contain `loud`). Re-run `/zeph-loud`, then `/zeph-status`.
-- **`/tmp` not writable**: `touch /tmp/test && rm /tmp/test`; inspect `ls -ld /tmp`.
+- **Not pushing every turn**: verify — `ls -la "${XDG_STATE_HOME:-$HOME/.local/state}/zeph"/pushmode-*`
+  (should contain `loud`). Re-run `/zeph-loud`, then `/zeph-status`.
 - **Mode is per-project** (hashed from the directory) — confirm with `pwd`.

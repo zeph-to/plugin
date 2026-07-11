@@ -60,6 +60,7 @@ run_hook() {
     rm -f "$WORK/last-call"
     printf '%s' "$input" \
       | CLAUDE_PROJECT_DIR="$project_dir" PATH="$STUB_DIR:$PATH" \
+        XDG_STATE_HOME="$WORK/state" \
         bash "$HOOK_SCRIPT" 2>/dev/null
 }
 
@@ -107,11 +108,18 @@ assert "body stays ≤ 600 bytes (UTF-8 safe)" zeph_body_bytes_le 600
 echo
 echo "[mute file present — stays silent]"
 PROJECT_DIR="$WORK/muted-project"
-mkdir -p "$PROJECT_DIR"
+mkdir -p "$PROJECT_DIR" "$WORK/state/zeph"
 MUTE_HASH=$(printf '%s' "$PROJECT_DIR" | cksum | cut -d' ' -f1)
-touch "/tmp/zeph-muted-$MUTE_HASH"
+touch "$WORK/state/zeph/muted-$MUTE_HASH"
 run_hook '{"tool_input":{"question":"would normally fire"}}' "$PROJECT_DIR"
 assert "muted project skips push"      zeph_silent
+rm -f "$WORK/state/zeph/muted-$MUTE_HASH"
+
+echo
+echo "[user-owned legacy /tmp mute file — stays silent]"
+touch "/tmp/zeph-muted-$MUTE_HASH"
+run_hook '{"tool_input":{"question":"would normally fire"}}' "$PROJECT_DIR"
+assert "legacy mute file still honored" zeph_silent
 rm -f "/tmp/zeph-muted-$MUTE_HASH"
 
 echo

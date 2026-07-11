@@ -29,7 +29,24 @@ command -v jq >/dev/null 2>&1 || exit 0
 . "$(dirname "${BASH_SOURCE[0]}")/gate.sh"
 
 MUTE_HASH=$(printf '%s' "${CLAUDE_PROJECT_DIR:-$(pwd)}" | cksum | cut -d' ' -f1)
-[ -f "/tmp/zeph-muted-${MUTE_HASH}" ] && exit 0
+
+# Mute/push-mode state lives under a per-user dir. It used to sit at
+# predictable names in world-writable /tmp, where any local user could
+# pre-create a victim's mute file (sticky /tmp makes it un-deletable by the
+# victim). Legacy /tmp files are still honored during migration, but only
+# when owned by the current user (-O), which neutralizes planted files.
+ZEPH_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/zeph"
+zeph_state_present() { # $1 = kind (muted|pushmode); echoes the live path, rc 1 if none
+    if [ -f "$ZEPH_STATE_DIR/$1-${MUTE_HASH}" ]; then
+        echo "$ZEPH_STATE_DIR/$1-${MUTE_HASH}"
+    elif [ -f "/tmp/zeph-$1-${MUTE_HASH}" ] && [ -O "/tmp/zeph-$1-${MUTE_HASH}" ]; then
+        echo "/tmp/zeph-$1-${MUTE_HASH}"
+    else
+        return 1
+    fi
+}
+
+zeph_state_present muted >/dev/null && exit 0
 
 # User push-mode dial (a level above the model's per-turn Push Signal marker):
 #   quiet — suppress every auto-push except a `high` marker
@@ -37,7 +54,7 @@ MUTE_HASH=$(printf '%s' "${CLAUDE_PROJECT_DIR:-$(pwd)}" | cksum | cut -d' ' -f1)
 # Absent or unrecognised → normal (the marker + heuristic gate decides). Set via
 # the /zeph-quiet|/zeph-loud|/zeph-normal skills, mirroring /zeph-mute.
 PUSHMODE=""
-[ -f "/tmp/zeph-pushmode-${MUTE_HASH}" ] && PUSHMODE=$(tr -d '[:space:]' < "/tmp/zeph-pushmode-${MUTE_HASH}" 2>/dev/null)
+PUSHMODE_FILE=$(zeph_state_present pushmode) && PUSHMODE=$(tr -d '[:space:]' < "$PUSHMODE_FILE" 2>/dev/null)
 
 INPUT=$(cat)
 TRANSCRIPT=$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty')

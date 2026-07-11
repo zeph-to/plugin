@@ -33,7 +33,7 @@ mode.
 
 - **`ZEPH_HOOK_ID` is set.** Without it there is no steering channel — refuse and
   point the user to `/zeph-config`.
-- **Not muted.** If `/tmp/zeph-muted-$HASH` exists, refuse: autonomous mode
+- **Not muted.** If `/zeph-status` reports MUTED, refuse: autonomous mode
   without notifications is unattended work with no steering. Suggest `/zeph-unmute`.
 - **Explicit user invocation.** Never self-trigger this mode because a task
   "looks long". The user opts in with `/zeph-auto ...`.
@@ -54,10 +54,12 @@ mode.
    it whenever you are unsure how much time is left):
 
    ```bash
-   HASH=$(echo -n "${CLAUDE_PROJECT_DIR:-$(pwd)}" | cksum | cut -d' ' -f1)
+   HASH=$(printf '%s' "${CLAUDE_PROJECT_DIR:-$(pwd)}" | cksum | cut -d' ' -f1)
+   STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/zeph"
+   mkdir -p "$STATE_DIR"
    MINUTES=120   # parsed from the duration argument
    DEADLINE=$(( $(date +%s) + MINUTES * 60 ))
-   printf '%s %s\n' "$DEADLINE" "$MINUTES" > "/tmp/zeph-auto-$HASH"
+   printf '%s %s\n' "$DEADLINE" "$MINUTES" > "$STATE_DIR/auto-$HASH"
    date -r "$DEADLINE" 2>/dev/null || date -d "@$DEADLINE"   # macOS | Linux
    ```
 
@@ -93,8 +95,8 @@ chunks (~15–45 min each). Then for each unit:
 1. **Time check** (before starting every unit):
 
    ```bash
-   HASH=$(echo -n "${CLAUDE_PROJECT_DIR:-$(pwd)}" | cksum | cut -d' ' -f1)
-   read -r DEADLINE MINUTES < "/tmp/zeph-auto-$HASH"
+   HASH=$(printf '%s' "${CLAUDE_PROJECT_DIR:-$(pwd)}" | cksum | cut -d' ' -f1)
+   read -r DEADLINE MINUTES < "${XDG_STATE_HOME:-$HOME/.local/state}/zeph/auto-$HASH"
    echo "remaining: $(( (DEADLINE - $(date +%s)) / 60 ))m of ${MINUTES}m"
    ```
 
@@ -137,7 +139,7 @@ text — CORE_RULES rules 3/10 apply):
 
 1. Finish or revert the in-flight unit (same 3-attempt rule — never leave the
    tree red or dirty).
-2. Remove the state file: `rm -f "/tmp/zeph-auto-$HASH"`.
+2. Remove the state file: `rm -f "${XDG_STATE_HOME:-$HOME/.local/state}/zeph/auto-$HASH"`.
 3. **Final report** in your response text: units completed (with commit hashes),
    units skipped and why, every fallback-resolved decision, and what's left.
 4. **Final ask**:
@@ -150,7 +152,7 @@ text — CORE_RULES rules 3/10 apply):
 
 - **"No ZEPH_HOOK_ID"** — two-way tools are unavailable; auto mode cannot run.
   Run `/zeph-config` to set it up.
-- **State file missing mid-run** (e.g. `/tmp` cleared): treat the deadline as
+- **State file missing mid-run** (e.g. state dir cleared): treat the deadline as
   now — wrap up rather than guess how much budget is left.
 - **User types in the terminal mid-run**: that message is steering input, same
   as a `zeph_ask` reply. Apply it and continue the loop.
