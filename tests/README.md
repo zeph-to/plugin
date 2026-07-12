@@ -13,6 +13,7 @@ bash tests/run-all.sh
 # Or one suite at a time
 bash tests/test-zeph-stop.sh
 bash tests/test-zeph-ask.sh
+bash tests/test-zeph-remote.sh
 ```
 
 Exits 0 when all tests pass, non-zero otherwise. CI runs `run-all.sh` on
@@ -53,6 +54,19 @@ each one would have failed before the corresponding fix landed:
 | `muted project skips push` | Same `<stateDir>/muted-<hash>` opt-out. |
 | `title carries project basename` | Verifies CLAUDE_PROJECT_DIR plumbing. |
 | `invalid JSON input doesn't crash` | `jq` errors are absorbed; fallback text still fires. |
+
+### zeph-remote.sh (ADR-0002)
+
+| Test | Catches |
+|------|---------|
+| `fresh marker + matching prompt → REMOTE context` | The happy path: additionalContext emitted, marker consumed one-shot. |
+| `ZEPH_HOOK_ID unset → one-way conversion CTA` | The funnel branch — no two-way claim, `cli setup` mentioned. |
+| `text mismatch → silent, marker kept` | The exact-hash guarantee: a terminal keystroke racing a phone message can't false-flag REMOTE. |
+| `stale marker (>60 s) → silent, marker kept` | The freshness window; stale files stay harmless until overwritten. |
+| `muted project → marker left unconsumed` | Mute outranks detection (Rule 12). |
+| `whitespace-padded / multi-line prompts` | The trim mirrors the listener's `text.trim()`; multi-line bodies match byte-for-byte. |
+| `malformed marker → silent, exit 0` | The hook must never block a prompt. |
+| `legacy /tmp marker honored` | Same `zeph_state_present` resolution (user-owned legacy fallback) as every other state file. |
 
 ## Fixtures
 

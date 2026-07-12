@@ -1,7 +1,15 @@
 # ADR-0002: Remote-origin detection — phone-sent messages enter REMOTE mode
 
 ## Status
-Proposed (2026-07-12). Design from an analysis session; implementation to follow.
+Accepted (2026-07-12). Design from an analysis session; passed CEO review (GO)
+with three refinements folded in below: the value-hypothesis premise, the
+one-way branch framed as a conversion funnel, and a pinned release order.
+
+**Premise (value hypothesis):** the "high value" call assumes phone-first
+lightweight turns are common. This ADR came from an analysis session, not a
+user report — the frequency of that entry pattern is still a hypothesis.
+Validate by observation once shipped; if phone-initiated messages turn out to
+be rare, the ROI drops accordingly.
 
 ## Context
 CORE_RULES Rule 9 already defines a sticky **REMOTE** mode: once the user answers
@@ -62,9 +70,15 @@ ${XDG_STATE_HOME:-$HOME/.local/state}/zeph/remote-<hash>
    - `ZEPH_HOOK_ID` set → "This message arrived from the user's phone via zeph.
      You are in sticky REMOTE mode (CORE_RULES Rule 9): end every response with
      `zeph_ask` until the user exits."
-   - `ZEPH_HOOK_ID` unset → one-way variant: user is remote but two-way is
-     unavailable; make the Stop-hook push carry the substance, mention `npx
-     @zeph-to/cli setup` once.
+   - `ZEPH_HOOK_ID` unset → one-way variant. This branch is not dead code —
+     it is a **conversion funnel**. The injection path (phone → listener →
+     tmux) authenticates on the API key alone and never touches
+     `ZEPH_HOOK_ID`, so "listener set up, two-way not enabled" is a real,
+     reachable user state — and one where the user has just *proven* they
+     drive sessions from their phone. That is the best possible moment to
+     surface `npx @zeph-to/cli setup` (once per session; the context text
+     instructs the model to self-dedup). Keep the branch a string-level
+     variation of the same mechanism — no separate hook, no separate state.
 5. Muted project (`zeph_state_present muted`) → exit silently without consuming
    the file. Mute outranks everything (Rule 12).
 6. Always exit 0. This hook only adds context; it must never block a prompt.
@@ -91,9 +105,15 @@ provide everything downstream of detection.
   writes, the plugin reads. Version skew degrades gracefully in both directions:
   old cli + new plugin → no file, hook is a no-op; new cli + old plugin → stray
   state file that the next new-plugin session consumes or ignores stale.
-- **Cost (scope):** covers Claude Code panes only. codex/gemini injections have
-  no hook system to read the file — phase 2 could fall back to a visible text
-  marker (the rejected Alternative A) for those agents.
+  **Release order is pinned: cli first, plugin second** — the cli-first window
+  only produces harmless unconsumed files, while plugin-first would ship a hook
+  that can never fire.
+- **Cost (scope):** covers Claude Code panes only — codex/gemini injections
+  have no hook system to read the file. **Phase 2 is a named roadmap goal, not
+  a footnote:** the 10-star version of this feature is "the phone is a
+  first-class driver for *every* agent from the first message". The visible
+  text marker (Alternative A) is the designated fallback mechanism for agents
+  without hooks.
 - **Edge (same-cwd sessions):** two CC sessions in one cwd share the hash key.
   The session that received the injection consumes the file on its next prompt;
   the other session would need the user to type the byte-identical text within
@@ -110,8 +130,11 @@ provide everything downstream of detection.
 - **A. Visible text marker** (listener appends `<!-- zeph: remote -->` to the
   injected text): plugin-only precedent exists (ADR-0001), works for any agent —
   but it pollutes the prompt and transcript, the model may quote it back, and
-  compliance is soft (a rule, not a mechanism). Kept as the phase-2 fallback for
-  non-Claude agents; rejected as the primary mechanism.
+  compliance is soft (a rule, not a mechanism). Honest trade-off acknowledged:
+  A would have been the *faster demand-validation* path (one repo, every agent
+  immediately); we chose zero-pollution product quality over validation speed.
+  Kept as the phase-2 fallback for non-Claude agents; rejected as the primary
+  mechanism.
 - **B-lite. Timestamp-only state file** (no text hash): simpler, but a terminal
   keystroke landing within the freshness window of a phone injection false-flags
   REMOTE. The hash costs one `shasum` call and eliminates the race entirely.

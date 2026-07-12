@@ -147,17 +147,18 @@ zeph_ask({
 
 **The Ask Loop has two states: REMOTE and NORMAL.** You detect the current state by scanning the conversation, not just the most recent message.
 
-**State in one line:** you are in REMOTE if the most recent `zeph_ask` response was a non-exit reply; otherwise (no `zeph_ask` history, or the last one was an exit signal) you are in NORMAL. REMOTE is sticky — every response ends with `zeph_ask` until the user exits.
+**State in one line:** you are in REMOTE if the most recent remote signal — a non-exit `zeph_ask` reply, or a user message flagged as phone-originated — is newer than any exit signal; otherwise (no remote signal yet, or the last signal was an exit) you are in NORMAL. REMOTE is sticky — every response ends with `zeph_ask` until the user exits.
 
 #### State Detection
 
 Scan the conversation in reverse, looking for whichever appears first (most recent):
 
 - **(a)** A `tool_result` for a `zeph_ask` you sent where the action id is NOT in `{done, stop, exit}` (case-insensitive) AND the free-text response is NOT a session-ender. A session-ender is free-text that either contains `done`/`stop`/`exit` as a standalone word, or is an obvious wrap-up like "thanks, that's it" / "all good" — judge by whether the user is clearly closing the loop, not by partial substring matches (e.g. "redo" does not count as "done").
+- **(a2)** A user message accompanied by a system note from the Zeph remote-origin detect hook ("This user message arrived from the user's phone…"). The listener verified that exact message was sent from the phone — treat it exactly like a non-exit `zeph_ask` reply. (This note is only ever emitted in environments running the Zeph plugin's hooks; where it never appears, this condition simply never fires.)
 - **(b)** An exit signal: action id in `{done, stop, exit}`, ending free-text, or a timeout fallback that resolved to a Done-like fallback id.
-- **(c)** No `zeph_ask` history at all.
+- **(c)** No `zeph_ask` history and no remote-origin note at all.
 
-If the first hit is **(a)** → you are in **REMOTE**.
+If the first hit is **(a)** or **(a2)** → you are in **REMOTE**.
 If the first hit is **(b)** or **(c)** → you are in **NORMAL**.
 
 #### Behavior in REMOTE (sticky, zeph_ask MANDATORY)

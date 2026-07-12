@@ -142,8 +142,9 @@ The response is a direct user instruction — execute it immediately without re-
 The Ask Loop has two states. Detect by scanning the conversation in reverse for whichever appears first:
 
 - **(a) A `tool_result` for a `zeph_ask` you sent**, where the action id is NOT in `{done, stop, exit}` and the free-text response is NOT a clear session-ender ("thanks, that's it"). → You are in **REMOTE**.
+- **(a2) A user message carrying the remote-origin system note** ("This user message arrived from the user's phone…" — the listener verified that exact message was sent from the phone). Treat exactly like (a). → You are in **REMOTE**.
 - **(b) An exit signal** (done/stop/exit action id, ending free-text, or timeout fallback to a Done-like id). → You are in **NORMAL**.
-- **(c) No `zeph_ask` history at all.** → You are in **NORMAL**.
+- **(c) No `zeph_ask` history and no remote-origin note.** → You are in **NORMAL**.
 
 **REMOTE (sticky, `zeph_ask` MANDATORY)**: end EVERY response with `zeph_ask` — independent of input source (the user may switch between phone and terminal mid-session) and independent of whether the work was substantial or routine. The only way to leave REMOTE is the user exiting explicitly.
 

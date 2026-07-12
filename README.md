@@ -132,6 +132,8 @@ When `ZEPH_HOOK_ID` is configured, Claude uses `zeph_ask` as its final action af
 
 The response is executed immediately without confirmation, then Claude sends another `zeph_ask`. This loop continues until the user selects "Done". If the AI skips `zeph_ask`, the Stop hook sends a one-way notification as fallback.
 
+The loop also starts from the phone side: when you send a message via the app's agent chat, the `zeph listener` records exactly what it injected and the plugin's UserPromptSubmit hook verifies the match — Claude then knows you're remote and enters the ask loop on its own, even for lightweight turns it would otherwise end silently (ADR-0002).
+
 ### Notification Summary
 
 | Event | Source | Reliability | Duplicates |
@@ -150,6 +152,7 @@ zeph-to/plugin (Claude Code plugin)
   ├─ hooks/zeph-setup.js    → SessionStart: inject rules
   ├─ hooks/zeph-stop.sh     → Stop: auto completion notification
   ├─ hooks/zeph-ask.sh      → PreToolUse: question notification
+  ├─ hooks/zeph-remote.sh   → UserPromptSubmit: phone-sent message → REMOTE mode
   ├─ .mcp.json              → MCP server registration
   └─ uses:
       ├─ @zeph-to/cli     → CLI (notify/list/dismiss/test/setup)
