@@ -113,12 +113,17 @@ provide everything downstream of detection.
   **Release order is pinned: cli first, plugin second** — the cli-first window
   only produces harmless unconsumed files, while plugin-first would ship a hook
   that can never fire.
-- **Cost (scope):** covers Claude Code panes only — codex/gemini injections
-  have no hook system to read the file. **Phase 2 is a named roadmap goal, not
-  a footnote:** the 10-star version of this feature is "the phone is a
-  first-class driver for *every* agent from the first message". The visible
-  text marker (Alternative A) is the designated fallback mechanism for agents
-  without hooks.
+- **Cost (scope):** at acceptance this covered Claude Code panes only —
+  codex/gemini injections had no hook system to read the file. **Phase 2 is a
+  named roadmap goal, not a footnote:** the 10-star version of this feature is
+  "the phone is a first-class driver for *every* agent from the first message".
+  *Phase 2 update (2026-07): delivered via native hooks, not the visible-marker
+  fallback — both agents grew CC-compatible prompt-submit hooks in 2026
+  (Gemini CLI `BeforeAgent`, Codex CLI `UserPromptSubmit`, same
+  `hookSpecificOutput.additionalContext` contract). The reader ships as
+  `zeph remote-hook <agent>` in the cli and `zeph setup` registers it; the
+  marker format and write site are unchanged. Alternative A is no longer
+  needed for these agents and remains an option only for hook-less ones.*
 - **Edge (same-cwd sessions):** two CC sessions in one cwd share the hash key.
   The session that received the injection consumes the file on its next prompt;
   the other session would need the user to type the byte-identical text within
