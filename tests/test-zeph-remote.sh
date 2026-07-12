@@ -107,12 +107,19 @@ assert "no output"     [ -z "$OUT" ]
 assert "marker kept"   [ -f "$(marker_path "$P")" ]
 
 echo
-echo "[stale marker (>60s) → silent, marker kept]"
+echo "[within the 15-min window (e.g. long agent turn) → still matches]"
+P="$WORK/proj-longturn"
+write_marker "$P" "sent during a long turn" 600
+CTX=$(run_hook "sent during a long turn" "$P" "hook_123" | ctx_of)
+assert "matches at 10 min"  [ -n "$CTX" ]
+
+echo
+echo "[stale marker (>15min) → silent, marker deleted (housekeeping)]"
 P="$WORK/proj-stale"
-write_marker "$P" "old command" 120
+write_marker "$P" "old command" 1000
 OUT=$(run_hook "old command" "$P" "hook_123")
-assert "no output"     [ -z "$OUT" ]
-assert "marker kept"   [ -f "$(marker_path "$P")" ]
+assert "no output"       [ -z "$OUT" ]
+assert "marker deleted"  [ ! -f "$(marker_path "$P")" ]
 
 echo
 echo "[muted project → silent, marker left unconsumed]"
@@ -146,6 +153,14 @@ ML=$'first line\nsecond line'
 write_marker "$P" "$ML"
 CTX=$(run_hook "$ML" "$P" "hook_123" | ctx_of)
 assert "multi-line match"  [ -n "$CTX" ]
+
+echo
+echo "[trailing U+00A0 NBSP survives the trim on both sides (ASCII-only parity)]"
+P="$WORK/proj-nbsp"
+NB=$'nbsp end\xc2\xa0'
+write_marker "$P" "$NB"
+CTX=$(run_hook "$NB" "$P" "hook_123" | ctx_of)
+assert "NBSP-suffixed text matches"  [ -n "$CTX" ]
 
 echo
 echo "[malformed marker content → silent, no crash]"

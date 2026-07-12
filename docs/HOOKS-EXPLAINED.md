@@ -231,7 +231,7 @@ ls "${XDG_STATE_HOME:-$HOME/.local/state}/zeph/muted-$HASH"
 - Fires on every prompt submit, but stays a silent no-op unless the prompt
   matches a marker the `zeph listener` wrote when it injected a phone message
   into this project's tmux pane
-- Match = same project (cksum of dir) + fresh (≤60 s) + byte-identical
+- Match = same project (cksum of dir) + fresh (≤15 min) + byte-identical
   sha256 of the trimmed text — a terminal keystroke can never false-match
 - On match: consumes the marker (one-shot) and injects context telling the
   model the user is remote → sticky REMOTE mode (every response ends with an

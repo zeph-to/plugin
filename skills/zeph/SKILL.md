@@ -150,7 +150,7 @@ The Ask Loop has two states. Detect by scanning the conversation in reverse for 
 
 **NORMAL**: apply Rule 4 (CORE_RULES.md) — substantial work → `zeph_ask`, routine work → skip and let the Stop hook fire.
 
-**Exit**: the moment the user picks `done`/`stop`/`exit`, types an ending phrase, or the `zeph_ask` times out to a Done-like fallback, flip to NORMAL. Don't send `zeph_ask` on the response that processes the exit signal. Always set `fallback` to a safe/inert id.
+**Exit**: the moment the user picks `done`/`stop`/`exit`, types an ending phrase, or the `zeph_ask` times out to a Done-like fallback, flip to NORMAL. Don't send `zeph_ask` on the response that processes the exit signal. In REMOTE, set `timeout` 300–600 s and a Done-like `fallback` id — an unanswered ask then exits the loop quietly instead of spamming an absent user (re-entry is one phone message away). Never set a fallback id that would authorize a destructive action.
 
 ## AskUserQuestion vs zeph_ask
 

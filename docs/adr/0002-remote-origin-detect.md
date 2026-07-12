@@ -64,8 +64,13 @@ ${XDG_STATE_HOME:-$HOME/.local/state}/zeph/remote-<hash>
 1. Read stdin JSON, extract `.prompt`.
 2. Resolve the state file via `gate.sh zeph_state_present remote <cksum of
    CLAUDE_PROJECT_DIR>` (new-location-first + owner-checked legacy, for free).
-3. Match: file fresh (≤ 60 s) **and** `sha256(trim(prompt)) == recorded hash`
-   (trim both sides — the terminal may normalize trailing whitespace).
+3. Match: file fresh (≤ 15 min) **and** `sha256(trim(prompt)) == recorded hash`.
+   Trim on both sides is the same explicit ASCII set (`' \t\r\n\f\v'`), not
+   `String.trim()` / `[[:space:]]` — those disagree on Unicode whitespace
+   (U+00A0 etc.) and the digests must be computed over identical bytes. The
+   window is generous on purpose: the exact-hash match already makes false
+   positives impossible, and a message sent mid-turn queues until the turn
+   ends — often past a minute. Stale markers are deleted on sight.
 4. On match: delete the file (one-shot), emit `hookSpecificOutput.additionalContext`:
    - `ZEPH_HOOK_ID` set → "This message arrived from the user's phone via zeph.
      You are in sticky REMOTE mode (CORE_RULES Rule 9): end every response with
@@ -117,14 +122,18 @@ provide everything downstream of detection.
 - **Edge (same-cwd sessions):** two CC sessions in one cwd share the hash key.
   The session that received the injection consumes the file on its next prompt;
   the other session would need the user to type the byte-identical text within
-  60 s to mis-consume it — negligible. If it ever matters, add the tmux session
+  the freshness window to mis-consume it — negligible. If it ever matters, add the tmux session
   name to the file name; the pane cwd keying is accepted for now.
 - **Edge (unconsumed files):** a message injected into a pane whose Claude is
   mid-turn still becomes the *next* prompt, so the file is consumed late but
-  correctly (the 60 s window is measured against prompt submit; a long-running
-  turn can exceed it — the loop then simply isn't entered, same as today, and
-  the next phone message retries). Stale files are overwritten by the next
-  inject and are harmless: without a hash match they do nothing.
+  correctly — the 15-minute window exists precisely to survive that queueing
+  gap. A turn that outlasts even that simply doesn't enter the loop (same as
+  today) and the next phone message retries. The hook deletes any stale
+  marker it encounters, so dead files don't accumulate.
+- **Edge (message burst):** two phone messages in quick succession overwrite
+  the same marker — the first prompt then has no matching digest and only the
+  second flags. Net effect is identical (REMOTE is sticky once entered on the
+  second), so this is accepted rather than engineered around.
 
 ## Alternatives considered
 - **A. Visible text marker** (listener appends `<!-- zeph: remote -->` to the

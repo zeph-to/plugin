@@ -167,6 +167,8 @@ End EVERY response with `zeph_ask`. This is non-negotiable while in REMOTE — i
 - Whether the next user message arrived as a `tool_result` or as a typed terminal message. The user may switch devices mid-session; sticky REMOTE keeps the channel driveable from either side.
 - Whether the work was substantial or routine.
 
+Set each REMOTE ask up so silence degrades cleanly: `timeout` 300–600 s and a Done-like `fallback` id. An unanswered ask then exits the loop quietly (a Done-like timeout fallback is an exit signal per **(b)**) instead of chaining more notifications at a user who stepped away — and re-entry is cheap, they just send another message from the phone.
+
 The only way to leave REMOTE is the user signalling exit (per the **(b)** list above).
 
 #### Behavior in NORMAL (apply Rule 4)

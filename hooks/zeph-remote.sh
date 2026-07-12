@@ -8,7 +8,7 @@
 # from their phone — which enters sticky REMOTE mode (CORE_RULES Rule 9)
 # so every response ends in an answerable zeph_ask.
 #
-# Detection is exact: same project (cksum of the dir), fresh (≤60 s), and
+# Detection is exact: same project (cksum of the dir), fresh (≤15 min), and
 # byte-identical trimmed text. A terminal keystroke racing a phone message
 # can never false-match. No match → silent no-op; this hook only ever adds
 # context and must never block a prompt (always exit 0).
@@ -35,15 +35,27 @@ read -r TS RECORDED < "$MARKER" 2>/dev/null || exit 0
 case "$TS" in '' | *[!0-9]*) exit 0 ;; esac
 [ -n "$RECORDED" ] || exit 0
 
-# Freshness: an old marker can't flag anything. Leave it — without a hash
-# match it does nothing, and the next inject overwrites it.
+# Freshness: 15 minutes. The window is deliberately generous — false
+# positives are already impossible without an exact hash match; its only
+# job is to stop the SAME text typed at the terminal much later from
+# re-flagging. It must survive the real gap between injection and prompt
+# submit: a message sent while the agent is mid-turn queues until the
+# turn ends, which can easily exceed a minute. Stale markers are dead
+# weight (can never flag) — delete instead of leaving them behind.
 NOW=$(date +%s)
-[ $((NOW - TS)) -le 60 ] || exit 0
+if [ $((NOW - TS)) -gt 900 ]; then
+    rm -f "$MARKER"
+    exit 0
+fi
 
-# Trim both ends to mirror the listener's text.trim() — the terminal may
-# normalize trailing whitespace between send-keys and the prompt.
-PROMPT="${PROMPT#"${PROMPT%%[![:space:]]*}"}"
-PROMPT="${PROMPT%"${PROMPT##*[![:space:]]}"}"
+# Trim both ends — the terminal may normalize trailing whitespace between
+# send-keys and the prompt. Explicit ASCII whitespace set, NOT [[:space:]]:
+# the POSIX class is locale-dependent (a UTF-8 locale may include U+00A0
+# etc.) and the listener hashes with the same explicit ASCII-only trim —
+# both sides must strip the exact same bytes or the digests diverge.
+WS=$' \t\r\n\f\v'
+PROMPT="${PROMPT#"${PROMPT%%[!${WS}]*}"}"
+PROMPT="${PROMPT%"${PROMPT##*[!${WS}]}"}"
 
 hash_stdin() {
     if command -v shasum >/dev/null 2>&1; then
