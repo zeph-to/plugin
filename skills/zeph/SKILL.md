@@ -6,7 +6,7 @@ description: >
   tasks, encountering errors, or needing user decisions while away from terminal.
 metadata:
   author: zeph-to
-  version: "0.5.9"
+  version: "0.8.0"
   relatedSkills:
     - zeph-config
     - zeph-mute
@@ -142,14 +142,15 @@ The response is a direct user instruction — execute it immediately without re-
 The Ask Loop has two states. Detect by scanning the conversation in reverse for whichever appears first:
 
 - **(a) A `tool_result` for a `zeph_ask` you sent**, where the action id is NOT in `{done, stop, exit}` and the free-text response is NOT a clear session-ender ("thanks, that's it"). → You are in **REMOTE**.
+- **(a2) A user message carrying the remote-origin system note** ("This user message arrived from the user's phone…" — the listener verified that exact message was sent from the phone). Treat exactly like (a). → You are in **REMOTE**.
 - **(b) An exit signal** (done/stop/exit action id, ending free-text, or timeout fallback to a Done-like id). → You are in **NORMAL**.
-- **(c) No `zeph_ask` history at all.** → You are in **NORMAL**.
+- **(c) No `zeph_ask` history and no remote-origin note.** → You are in **NORMAL**.
 
 **REMOTE (sticky, `zeph_ask` MANDATORY)**: end EVERY response with `zeph_ask` — independent of input source (the user may switch between phone and terminal mid-session) and independent of whether the work was substantial or routine. The only way to leave REMOTE is the user exiting explicitly.
 
 **NORMAL**: apply Rule 4 (CORE_RULES.md) — substantial work → `zeph_ask`, routine work → skip and let the Stop hook fire.
 
-**Exit**: the moment the user picks `done`/`stop`/`exit`, types an ending phrase, or the `zeph_ask` times out to a Done-like fallback, flip to NORMAL. Don't send `zeph_ask` on the response that processes the exit signal. Always set `fallback` to a safe/inert id.
+**Exit**: the moment the user picks `done`/`stop`/`exit`, types an ending phrase, or the `zeph_ask` times out to a Done-like fallback, flip to NORMAL. Don't send `zeph_ask` on the response that processes the exit signal. In REMOTE, set `timeout` 300–600 s and a Done-like `fallback` id — an unanswered ask then exits the loop quietly instead of spamming an absent user (re-entry is one phone message away). Never set a fallback id that would authorize a destructive action.
 
 ## AskUserQuestion vs zeph_ask
 
@@ -178,13 +179,14 @@ zeph_ask(title: "Done. Next?", actions: [{id:"/review", label:"Review"}, {id:"/s
 
 ## Skill Map
 
-Zeph has 5 related skills. Here's when to use each:
+Zeph has 6 related skills. Here's when to use each:
 
 | Skill | When | Example |
 |-------|------|---------|
 | **/zeph** | You need to send notifications, ask questions, collect input | "Build done, next?", request deployment confirmation |
+| **/zeph-auto** | User starts a time-boxed autonomous work session | `/zeph-auto 2h fix the flaky tests` — loop until the budget runs out, steer via zeph_ask |
 | **/zeph-config** | Setting up Zeph for the first time, or adding Hook ID for remote control | `zeph-config` to guide through credentials & environment setup |
-| **/zeph-mute** | Too many notifications? Silence them for this session | `/zeph-mute` when working on something that doesn't need interruptions |
+| **/zeph-mute** | Too many notifications? Silence them for this project (until unmuted) | `/zeph-mute` when working on something that doesn't need interruptions |
 | **/zeph-status** | Check whether notifications are muted or active | `/zeph-status` to see current state |
 | **/zeph-unmute** | Re-enable notifications after muting | `/zeph-unmute` to turn them back on |
 

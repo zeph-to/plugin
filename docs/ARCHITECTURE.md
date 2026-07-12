@@ -119,17 +119,19 @@ zeph notify --title "dev test"
 
 ```
 /zeph-mute 실행
-  → Claude가 bash 실행: touch /tmp/zeph-muted-{cksum hash}
+  → Claude가 bash 실행: touch ${XDG_STATE_HOME:-~/.local/state}/zeph/muted-{cksum hash}
   → Stop hook: mute 파일 체크 → exit 0 (알림 skip)
   → Ask hook: mute 파일 체크 → exit 0 (알림 skip)
   → CLI (cli): mute 파일 체크 → exit 0 (다른 agent도 적용)
 ```
 
 - **Scope:** project-dir 기반 hash. 다른 프로젝트 세션은 영향 없음.
-- **생명주기:** `/tmp`에 저장 → 재부팅 시 자동 정리.
+- **생명주기:** per-user state dir에 저장 → `/zeph-unmute` 전까지 유지 (재부팅에도 유지).
+  구버전이 `/tmp`에 남긴 파일은 현재 유저 소유일 때만 인정 (world-writable `/tmp`
+  선점 공격 차단).
 - **Mute 커맨드:** `/zeph-mute`, `/zeph-unmute`, `/zeph-status`
 
-**Push Mode** — mute와 같은 tmp-파일 패턴(`/tmp/zeph-pushmode-{hash}`)으로 Stop
+**Push Mode** — mute와 같은 state-파일 패턴(`pushmode-{hash}`)으로 Stop
 hook의 자동 푸시 볼륨을 조절. mute가 완전 침묵이라면 push mode는 그 사이 다이얼:
 
 - `/zeph-quiet` → `high` 마커만 통과 · `/zeph-loud` → 매 턴 푸시 · `/zeph-normal` → 기본

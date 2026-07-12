@@ -1,11 +1,11 @@
 ---
 name: zeph-unmute
 description: >
-  Unmute Zeph push notifications for this session. Re-enables automatic
+  Unmute Zeph push notifications for this project (persists until undone). Re-enables automatic
   notifications from Stop and AskUserQuestion hooks. Use after /zeph-mute to turn them back on.
 metadata:
   author: zeph-to
-  version: "0.4.0"
+  version: "0.8.0"
   relatedSkills:
     - zeph
     - zeph-mute
@@ -18,16 +18,17 @@ metadata:
     - /zeph-unmute
 ---
 
-Unmute Zeph notifications for this session.
+Unmute Zeph notifications for this project (persists until undone).
 
 Run this bash command:
 
 ```bash
-HASH=$(echo -n "${CLAUDE_PROJECT_DIR:-$(pwd)}" | cksum | cut -d' ' -f1)
-rm -f "/tmp/zeph-muted-$HASH"
+HASH=$(printf '%s' "${CLAUDE_PROJECT_DIR:-$(pwd)}" | cksum | cut -d' ' -f1)
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/zeph"
+rm -f "$STATE_DIR/muted-$HASH" "/tmp/zeph-muted-$HASH"   # legacy /tmp too
 ```
 
-Then confirm to the user, in your own words, that Zeph notifications are re-enabled for this session.
+Then confirm to the user, in your own words, that Zeph notifications are re-enabled for this project (persists until undone).
 
 ## If Things Go Wrong
 
@@ -35,8 +36,8 @@ Then confirm to the user, in your own words, that Zeph notifications are re-enab
 - **Check**: Run `/zeph-status` to verify actual state
 - **Verify**: The mute file should be gone:
   ```bash
-  HASH=$(echo -n "$(pwd)" | cksum | cut -d' ' -f1)
-  ls -la /tmp/zeph-muted-$HASH  # should NOT exist
+  HASH=$(printf '%s' "$(pwd)" | cksum | cut -d' ' -f1)
+  ls -la "${XDG_STATE_HOME:-$HOME/.local/state}/zeph/muted-$HASH"  # should NOT exist
   ```
 - **Fix**: 
   1. Run `/zeph-unmute` again
@@ -44,9 +45,8 @@ Then confirm to the user, in your own words, that Zeph notifications are re-enab
   3. If still shows MUTED: mute file may have been recreated, try unmute once more
 
 **Problem**: "rm: permission denied"
-- **Check**: Is /tmp writable? `touch /tmp/test && rm /tmp/test`
-- **Fix**: Check /tmp permissions: `ls -ld /tmp` (should show rwxrwxrwt or similar)
-- If /tmp is locked: restart your terminal and try again
+- **Check**: Is the state dir writable? `ls -ld "${XDG_STATE_HOME:-$HOME/.local/state}/zeph"`
+- **Fix**: It's under your home directory — fix ownership/permissions if something else created it
 
 **Problem**: "Notifications still not appearing after unmuting"
 - **Check**: Did you restart Claude Code?

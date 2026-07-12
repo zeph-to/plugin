@@ -1,13 +1,13 @@
 ---
 name: zeph-quiet
 description: >
-  Set Zeph to QUIET push mode for this session — only high-priority pushes
+  Set Zeph to QUIET push mode for this project — only high-priority pushes
   (blockers and `high` Push Signals) reach you; routine completion pushes are
   suppressed. Use /zeph-normal to restore default, /zeph-loud for everything,
   /zeph-mute for full silence.
 metadata:
   author: zeph-to
-  version: "0.5.9"
+  version: "0.8.0"
   relatedSkills:
     - zeph
     - zeph-loud
@@ -22,13 +22,15 @@ metadata:
     - /zeph-quiet
 ---
 
-Set Zeph push mode to QUIET for this session.
+Set Zeph push mode to QUIET for this project (persists until undone).
 
 Run this bash command:
 
 ```bash
-HASH=$(echo -n "${CLAUDE_PROJECT_DIR:-$(pwd)}" | cksum | cut -d' ' -f1)
-printf 'quiet' > "/tmp/zeph-pushmode-$HASH"
+HASH=$(printf '%s' "${CLAUDE_PROJECT_DIR:-$(pwd)}" | cksum | cut -d' ' -f1)
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/zeph"
+mkdir -p "$STATE_DIR"
+printf 'quiet' > "$STATE_DIR/pushmode-$HASH"
 ```
 
 Then confirm to the user, in your own words: only high-priority pushes (blockers
@@ -41,9 +43,7 @@ silences everything.
 
 ## If Things Go Wrong
 
-- **Still getting routine pushes**: verify the file — `ls -la /tmp/zeph-pushmode-*`
+- **Still getting routine pushes**: verify the file — `ls -la "${XDG_STATE_HOME:-$HOME/.local/state}/zeph"/pushmode-*`
   (should contain `quiet`). Re-run `/zeph-quiet`, then `/zeph-status`.
-- **`/tmp` not writable**: `touch /tmp/test && rm /tmp/test` to check; inspect
-  `ls -ld /tmp`.
 - **Mode is per-project** (hashed from the directory). If you switch folders, each
   has its own mode — confirm with `pwd`.

@@ -1,18 +1,19 @@
 # Zeph Hooks — Deep Dive
 
-How the three Claude Code hooks work, what they do, and how to debug them.
+How the four Claude Code hooks work, what they do, and how to debug them.
 
 ---
 
 ## Overview
 
-The plugin installs 3 hooks that fire automatically on Claude Code events:
+The plugin installs 4 hooks that fire automatically on Claude Code events:
 
 | Hook | Event | File | Purpose |
 |------|-------|------|---------|
 | **SessionStart** | Session begins | zeph-setup.js | Inject behavioral rules into context |
 | **Stop** | Response ends | zeph-stop.sh | Send completion notification if work was done |
 | **PreToolUse** (Ask) | Before AskUserQuestion | zeph-ask.sh | Send notification when Claude asks user a question |
+| **UserPromptSubmit** | Prompt submitted | zeph-remote.sh | Flag phone-sent messages → sticky REMOTE mode (ADR-0002) |
 
 ---
 
@@ -99,7 +100,8 @@ The hook is smart about WHAT to count:
    - Result: Counts only work done SINCE the user's last input
 
 3. **Mute check**: Skips if project is muted
-   - Checks for `/tmp/zeph-muted-{hash}` file
+   - Checks for `${XDG_STATE_HOME:-~/.local/state}/zeph/muted-{hash}` (legacy
+     `/tmp/zeph-muted-{hash}` still honored when owned by the current user)
    - Hash = `cksum(project-dir)`
    - Result: `/zeph-mute` command silences notifications
 
@@ -140,11 +142,11 @@ command -v jq && echo "✓ jq installed" || echo "✗ jq missing (install: brew 
 
 Check if mute file exists:
 ```bash
-HASH=$(echo -n "$(pwd)" | cksum | cut -d' ' -f1)
-ls -la /tmp/zeph-muted-$HASH
+HASH=$(printf '%s' "$(pwd)" | cksum | cut -d' ' -f1)
+ls -la "${XDG_STATE_HOME:-$HOME/.local/state}/zeph/muted-$HASH"
 
 # If file exists, notifications are silenced. Remove to unmute:
-# rm /tmp/zeph-muted-$HASH
+# rm "${XDG_STATE_HOME:-$HOME/.local/state}/zeph/muted-$HASH"
 ```
 
 Test the hook manually:
@@ -217,8 +219,61 @@ command -v zeph || echo "npx -y @zeph-to/cli"
 echo $ZEPH_API_KEY
 
 # 3. Is the project muted?
-HASH=$(echo -n "$(pwd)" | cksum | cut -d' ' -f1)
-ls /tmp/zeph-muted-$HASH
+HASH=$(printf '%s' "$(pwd)" | cksum | cut -d' ' -f1)
+ls "${XDG_STATE_HOME:-$HOME/.local/state}/zeph/muted-$HASH"
+```
+
+---
+
+## Remote-Origin Hook (zeph-remote.sh)
+
+**What it does (ADR-0002):**
+- Fires on every prompt submit, but stays a silent no-op unless the prompt
+  matches a marker the `zeph listener` wrote when it injected a phone message
+  into this project's tmux pane
+- Match = same project (cksum of dir) + fresh (≤15 min) + byte-identical
+  sha256 of the trimmed text — a terminal keystroke can never false-match
+- On match: consumes the marker (one-shot) and injects context telling the
+  model the user is remote → sticky REMOTE mode (every response ends with an
+  answerable `zeph_ask`)
+- Without `ZEPH_HOOK_ID`: one-way variant — tells the model to make the
+  Stop-hook push self-contained and mention `npx @zeph-to/cli setup` once
+
+**Marker file** (written by cli `listener.ts`, consumed here):
+
+```
+${XDG_STATE_HOME:-$HOME/.local/state}/zeph/remote-<hash>
+content: "<epochSeconds> <sha256hex-of-trimmed-text>\n"
+```
+
+**Example flow:**
+
+```
+User (on phone) sends "fix the login bug" via agent chat
+  ↓
+listener injects into tmux pane + writes remote-<hash> marker
+  ↓
+Claude Code submits the prompt → UserPromptSubmit hook fires:
+  1. marker exists, fresh, sha256 matches → rm marker
+  2. emit additionalContext: "user is remote → sticky REMOTE mode"
+  ↓
+Claude does the work, ends the response with zeph_ask
+  ↓
+User answers with a button tap — the loop continues from the phone
+```
+
+**Debugging:**
+
+```bash
+# Is a marker present for this project?
+HASH=$(printf '%s' "$(pwd)" | cksum | cut -d' ' -f1)
+cat "${XDG_STATE_HOME:-$HOME/.local/state}/zeph/remote-$HASH"
+
+# Verify what the hook would compute for a given prompt
+printf '%s' "fix the login bug" | shasum -a 256
+
+# Requires the cli listener new enough to write markers (release order:
+# cli ships first) and jq on PATH; without either the hook no-ops.
 ```
 
 ---
@@ -268,10 +323,11 @@ echo '{"type":"tool_use"}{"type":"tool_use"}' | jq . | grep tool_use | wc -l
 echo '{"type":"tool_use","name":"AskUserQuestion","input":{"prompt":"Test?"}}' | jq '.input.prompt'
 
 # Test mute check
-HASH=$(echo -n "." | cksum | cut -d' ' -f1)
-touch /tmp/zeph-muted-$HASH && echo "✓ Mute file created"
-[ -f "/tmp/zeph-muted-$HASH" ] && echo "✓ Mute check works"
-rm /tmp/zeph-muted-$HASH
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/zeph"; mkdir -p "$STATE_DIR"
+HASH=$(printf '%s' "." | cksum | cut -d' ' -f1)
+touch "$STATE_DIR/muted-$HASH" && echo "✓ Mute file created"
+[ -f "$STATE_DIR/muted-$HASH" ] && echo "✓ Mute check works"
+rm "$STATE_DIR/muted-$HASH"
 ```
 
 ---

@@ -14,12 +14,15 @@ ZEPH_CMD="$(command -v zeph 2>/dev/null || echo "npx -y @zeph-to/cli")"
 
 command -v jq >/dev/null 2>&1 || exit 0
 
-# Pure decision function (zeph_gate_decide) — shared semantics with the CLI,
-# parity-locked via tests/fixtures/gate-vectors.json.
+# Shared hook library: the pure gate decision (parity-locked to the CLI via
+# tests/fixtures/gate-vectors.json) plus state-file + CLI-bounding helpers.
 . "$(dirname "${BASH_SOURCE[0]}")/gate.sh"
 
+ZEPH_CMD=$(zeph_wrap_timeout "$ZEPH_CMD")
+
 MUTE_HASH=$(printf '%s' "${CLAUDE_PROJECT_DIR:-$(pwd)}" | cksum | cut -d' ' -f1)
-[ -f "/tmp/zeph-muted-${MUTE_HASH}" ] && exit 0
+
+zeph_state_present muted "$MUTE_HASH" >/dev/null && exit 0
 
 # User push-mode dial (a level above the model's per-turn Push Signal marker):
 #   quiet — suppress every auto-push except a `high` marker
@@ -27,7 +30,7 @@ MUTE_HASH=$(printf '%s' "${CLAUDE_PROJECT_DIR:-$(pwd)}" | cksum | cut -d' ' -f1)
 # Absent or unrecognised → normal (the marker + heuristic gate decides). Set via
 # the /zeph-quiet|/zeph-loud|/zeph-normal skills, mirroring /zeph-mute.
 PUSHMODE=""
-[ -f "/tmp/zeph-pushmode-${MUTE_HASH}" ] && PUSHMODE=$(tr -d '[:space:]' < "/tmp/zeph-pushmode-${MUTE_HASH}" 2>/dev/null)
+PUSHMODE_FILE=$(zeph_state_present pushmode "$MUTE_HASH") && PUSHMODE=$(tr -d '[:space:]' < "$PUSHMODE_FILE" 2>/dev/null)
 
 INPUT=$(cat)
 TRANSCRIPT=$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty')
@@ -52,6 +55,16 @@ case "$TRANSCRIPT" in
     */subagents/*) exit 0 ;;
     *observer*)    exit 0 ;;
 esac
+
+# Bound every jq pass to the transcript tail. `jq -s` parses the whole file,
+# so on a long session each Stop turn paid O(session length) — and up to ~10
+# passes on a slow-flush pushing turn. One turn's entries fit comfortably in
+# the last 2000 lines; if the last real user message falls outside the window
+# (a gigantic turn), since_last_user's null fallback treats the window as the
+# turn, and the entries that drive every decision (tool tallies, last
+# assistant text) live at the tail anyway.
+TAIL_LINES=2000
+read_tail() { tail -n "$TAIL_LINES" "$TRANSCRIPT" 2>/dev/null; }
 
 # Scope all checks to "entries since the last *real* user message" — Claude
 # Code logs tool_results as synthetic user messages, so a naive
@@ -102,11 +115,14 @@ def since_last_user:
 #   TOOL_COUNT        — total tool_use blocks
 #   NONREADONLY_COUNT — tools that are NOT read-only (Read/Grep/Glob); a turn
 #                       with zero is exploration noise the B1 floor drops.
-read ALREADY_ASKED TOOL_COUNT NONREADONLY_COUNT < <(jq -rs "$JQ_SINCE_USER"'
+# One tail read feeds both the tally and the first text extraction below —
+# the retry loops re-read because they poll for late-flushed content.
+TAIL_CONTENT=$(read_tail)
+read ALREADY_ASKED TOOL_COUNT NONREADONLY_COUNT < <(printf '%s\n' "$TAIL_CONTENT" | jq -rs "$JQ_SINCE_USER"'
     since_last_user
     | [.[] | content_blocks[] | select(.type == "tool_use") | .name // ""] as $tools
     | "\($tools | map(select(. == "zeph_ask" or . == "zeph_prompt")) | length) \($tools | length) \($tools | map(select(. != "Read" and . != "Grep" and . != "Glob")) | length)"
-' "$TRANSCRIPT" 2>/dev/null)
+' 2>/dev/null)
 ALREADY_ASKED=${ALREADY_ASKED:-0}
 TOOL_COUNT=${TOOL_COUNT:-0}
 NONREADONLY_COUNT=${NONREADONLY_COUNT:-0}
@@ -124,6 +140,7 @@ NONREADONLY_COUNT=${NONREADONLY_COUNT:-0}
 # later. Marker detection uses only a SHORT bounded wait: a fast-exit turn (skip
 # / read-only / <2 tools) must never block on a body it will never send. The
 # longer body wait runs only once a push is committed (further down).
+# Reads the transcript tail from stdin (pipe read_tail or a captured copy).
 extract_last_text() {
     jq -rs "$JQ_SINCE_USER"'
         since_last_user
@@ -134,14 +151,14 @@ extract_last_text() {
            | join(" ")
            | select(. != "")]
         | last // ""
-    ' "$TRANSCRIPT" 2>/dev/null
+    ' 2>/dev/null
 }
 
-TEXT=$(extract_last_text)
+TEXT=$(printf '%s\n' "$TAIL_CONTENT" | extract_last_text)
 marker_tries=0
 while [ -z "$TEXT" ] && [ "$marker_tries" -lt 3 ]; do
     sleep 0.15
-    TEXT=$(extract_last_text)
+    TEXT=$(read_tail | extract_last_text)
     marker_tries=$((marker_tries + 1))
 done
 
@@ -177,7 +194,7 @@ SUMMARY="$TEXT"
 summary_tries=0
 while [ -z "$SUMMARY" ] && [ "$summary_tries" -lt 5 ]; do
     sleep 0.2
-    SUMMARY=$(extract_last_text)
+    SUMMARY=$(read_tail | extract_last_text)
     summary_tries=$((summary_tries + 1))
 done
 
@@ -231,6 +248,13 @@ if [ -z "$SESSION_ID" ]; then
     ZEPH_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/zeph"
     SESSION_ID=$(cat "$ZEPH_CACHE_DIR/session-${MUTE_HASH}" 2>/dev/null \
               || cat "/tmp/zeph-session-${MUTE_HASH}" 2>/dev/null)
+    # The fallback value expands unquoted into the CLI argv below — validate
+    # it so a tampered cache file (the /tmp one is world-writable-parent
+    # legacy) can never inject extra arguments. Session ids are sess_* tokens
+    # or UUIDs; allow only those shapes.
+    case "$SESSION_ID" in
+        *[!A-Za-z0-9_-]*) SESSION_ID="" ;;
+    esac
 fi
 SESSION_FLAG=""
 [ -n "$SESSION_ID" ] && SESSION_FLAG="--session $SESSION_ID"

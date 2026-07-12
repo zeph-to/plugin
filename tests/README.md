@@ -13,6 +13,7 @@ bash tests/run-all.sh
 # Or one suite at a time
 bash tests/test-zeph-stop.sh
 bash tests/test-zeph-ask.sh
+bash tests/test-zeph-remote.sh
 ```
 
 Exits 0 when all tests pass, non-zero otherwise. CI runs `run-all.sh` on
@@ -36,11 +37,11 @@ each one would have failed before the corresponding fix landed:
 | `body stays under 15000-byte safety cap` | The 5000-codepoint upper bound, matching 0.4.0 behavior. |
 | `1-tool turn stays silent` | The basic `TOOL_COUNT < 2` gate. |
 | `turn with zeph_ask silenced` | The basic dedup that lets `zeph_ask` replace the Stop push. |
-| `muted project skips push` | The `/tmp/zeph-muted-<hash>` opt-out. |
+| `muted project skips push` | The `<stateDir>/muted-<hash>` opt-out (plus the user-owned legacy `/tmp` fallback). |
 | `read-only floor stays silent` | The B1 floor — a turn whose tools are all Read/Grep/Glob is exploration noise and is suppressed. |
 | `marker skip / push / high` | The Push Signal — `<!-- zeph: skip\|push\|high -->` overrides the heuristic (suppress / force / force+`--priority high`); the marker is stripped from the body. |
 | `no-space + newline-split marker leak guard` | Detect and strip share one `[[:blank:]]`-based pattern, so a malformed marker can't be detected-but-not-stripped (no leak) and a newline-split marker is honoured by neither. |
-| `push mode quiet / loud` | The `/tmp/zeph-pushmode-<hash>` dial — quiet keeps only high pushes, loud pushes every turn (still respecting dedup), cleared restores the default. |
+| `push mode quiet / loud` | The `pushmode-<hash>` dial — quiet keeps only high pushes, loud pushes every turn (still respecting dedup), cleared restores the default. |
 
 ### zeph-ask.sh
 
@@ -50,9 +51,22 @@ each one would have failed before the corresponding fix landed:
 | `multi-question .tool_input.questions[0].question` | The newer AskUserQuestion format with parallel questions. |
 | `no question field → 'Question pending' fallback` | Defends against schema changes. |
 | `Korean ≤ 200 codepoints (UTF-8 safe)` | The python3 trim; old `head -c 200` cut mid-byte and produced mojibake. |
-| `muted project skips push` | Same `/tmp/zeph-muted-<hash>` opt-out. |
+| `muted project skips push` | Same `<stateDir>/muted-<hash>` opt-out. |
 | `title carries project basename` | Verifies CLAUDE_PROJECT_DIR plumbing. |
 | `invalid JSON input doesn't crash` | `jq` errors are absorbed; fallback text still fires. |
+
+### zeph-remote.sh (ADR-0002)
+
+| Test | Catches |
+|------|---------|
+| `fresh marker + matching prompt → REMOTE context` | The happy path: additionalContext emitted, marker consumed one-shot. |
+| `ZEPH_HOOK_ID unset → one-way conversion CTA` | The funnel branch — no two-way claim, `cli setup` mentioned. |
+| `text mismatch → silent, marker kept` | The exact-hash guarantee: a terminal keystroke racing a phone message can't false-flag REMOTE. |
+| `stale marker (>15 min) → silent, marker deleted` | The freshness window survives long mid-turn queueing; dead markers are cleaned up on sight. |
+| `muted project → marker left unconsumed` | Mute outranks detection (Rule 12). |
+| `whitespace-padded / multi-line / NBSP prompts` | Both sides trim the same explicit ASCII whitespace set (Unicode spaces like U+00A0 stay in the digest); multi-line bodies match byte-for-byte. |
+| `malformed marker → silent, exit 0` | The hook must never block a prompt. |
+| `legacy /tmp marker honored` | Same `zeph_state_present` resolution (user-owned legacy fallback) as every other state file. |
 
 ## Fixtures
 

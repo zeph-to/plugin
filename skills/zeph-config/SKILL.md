@@ -6,7 +6,7 @@ description: >
   and verification. Run this once during initial setup.
 metadata:
   author: zeph-to
-  version: "0.5.0"
+  version: "0.8.0"
   relatedSkills:
     - zeph
     - zeph-status

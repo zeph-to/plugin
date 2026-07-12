@@ -1,13 +1,13 @@
 ---
 name: zeph-loud
 description: >
-  Set Zeph to LOUD push mode for this session — push on every turn, overriding
+  Set Zeph to LOUD push mode for this project — push on every turn, overriding
   the usual silence on read-only / sub-threshold turns and `skip` Push Signals.
   Use /zeph-normal to restore default, /zeph-quiet for important-only, /zeph-mute
   for silence.
 metadata:
   author: zeph-to
-  version: "0.5.9"
+  version: "0.8.0"
   relatedSkills:
     - zeph
     - zeph-quiet
@@ -22,13 +22,15 @@ metadata:
     - /zeph-loud
 ---
 
-Set Zeph push mode to LOUD for this session.
+Set Zeph push mode to LOUD for this project (persists until undone).
 
 Run this bash command:
 
 ```bash
-HASH=$(echo -n "${CLAUDE_PROJECT_DIR:-$(pwd)}" | cksum | cut -d' ' -f1)
-printf 'loud' > "/tmp/zeph-pushmode-$HASH"
+HASH=$(printf '%s' "${CLAUDE_PROJECT_DIR:-$(pwd)}" | cksum | cut -d' ' -f1)
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/zeph"
+mkdir -p "$STATE_DIR"
+printf 'loud' > "$STATE_DIR/pushmode-$HASH"
 ```
 
 Then confirm to the user, in your own words: every turn now sends a push —
@@ -38,7 +40,6 @@ default, `/zeph-quiet` limits to important pushes, `/zeph-mute` silences all.
 
 ## If Things Go Wrong
 
-- **Not pushing every turn**: verify — `ls -la /tmp/zeph-pushmode-*` (should
-  contain `loud`). Re-run `/zeph-loud`, then `/zeph-status`.
-- **`/tmp` not writable**: `touch /tmp/test && rm /tmp/test`; inspect `ls -ld /tmp`.
+- **Not pushing every turn**: verify — `ls -la "${XDG_STATE_HOME:-$HOME/.local/state}/zeph"/pushmode-*`
+  (should contain `loud`). Re-run `/zeph-loud`, then `/zeph-status`.
 - **Mode is per-project** (hashed from the directory) — confirm with `pwd`.

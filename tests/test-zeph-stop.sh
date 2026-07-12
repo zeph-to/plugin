@@ -79,6 +79,7 @@ run_hook() {
     rm -f "$WORK/last-call"
     echo "{\"transcript_path\":\"$transcript\"}" \
       | CLAUDE_PROJECT_DIR="$project_dir" PATH="$STUB_DIR:$PATH" \
+        XDG_STATE_HOME="$WORK/state" \
         bash "$HOOK_SCRIPT" 2>/dev/null
 }
 
@@ -174,19 +175,26 @@ run_hook "$OBS_DIR/session.jsonl"
 assert "observer transcript silenced"    zeph_silent
 
 echo
-echo "[mute file present]"
+echo "[mute file present — state dir]"
 PROJECT_DIR="$WORK/mute-project"
-mkdir -p "$PROJECT_DIR"
+mkdir -p "$PROJECT_DIR" "$WORK/state/zeph"
 MUTE_HASH=$(printf '%s' "$PROJECT_DIR" | cksum | cut -d' ' -f1)
-touch "/tmp/zeph-muted-$MUTE_HASH"
+touch "$WORK/state/zeph/muted-$MUTE_HASH"
 run_hook "$FIXTURES/main-2-tools.jsonl" "$PROJECT_DIR"
 assert "muted project skips push"        zeph_silent
+rm -f "$WORK/state/zeph/muted-$MUTE_HASH"
+
+echo
+echo "[mute file present — user-owned legacy /tmp]"
+touch "/tmp/zeph-muted-$MUTE_HASH"
+run_hook "$FIXTURES/main-2-tools.jsonl" "$PROJECT_DIR"
+assert "legacy mute file still honored"  zeph_silent
 rm -f "/tmp/zeph-muted-$MUTE_HASH"
 
 echo
 echo "[transcript_path missing — graceful exit]"
 rm -f "$WORK/last-call"
-echo '{}' | CLAUDE_PROJECT_DIR=/tmp PATH="$STUB_DIR:$PATH" bash "$HOOK_SCRIPT" 2>/dev/null
+echo '{}' | CLAUDE_PROJECT_DIR=/tmp PATH="$STUB_DIR:$PATH" XDG_STATE_HOME="$WORK/state" bash "$HOOK_SCRIPT" 2>/dev/null
 assert "exits cleanly on empty input"    zeph_silent
 
 echo

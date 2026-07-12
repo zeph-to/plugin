@@ -1,4 +1,7 @@
-# Push-gate decision function — sourced by zeph-stop.sh, no shebang, no exit.
+# Shared hook library — sourced by zeph-stop.sh and zeph-ask.sh, no shebang,
+# no exit. Two halves, mirroring cli/src/gate.ts:
+#   1. zeph_gate_decide — the pure decision function (vector-locked, below)
+#   2. state-file resolution + CLI bounding helpers (mirrored by convention)
 #
 # This is the PORTABLE half of the Stop hook: a pure function from turn facts
 # to a push verdict. Its semantics are locked to cli/src/gate.ts (@zeph-to/cli)
@@ -49,4 +52,40 @@ zeph_gate_decide() {
     esac
 
     echo "push $priority"
+}
+
+# ── Per-project state + CLI bounding (shared by both hooks) ──────────────────
+
+# Mute/push-mode/auto state lives under a per-user dir. It used to sit at
+# predictable names in world-writable /tmp, where any local user could
+# pre-create a victim's mute file (sticky /tmp makes it un-deletable by the
+# victim). Legacy /tmp files are honored during migration, but only when
+# owned by the current user (-O), which neutralizes planted files. The TS
+# twin is cli/src/gate.ts findStateFile — keep them behaviorally in sync.
+ZEPH_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/zeph"
+
+# zeph_state_present <kind> <hash> — kind is muted|pushmode|auto. Echoes the
+# live state-file path, rc 1 if none.
+zeph_state_present() {
+    if [ -f "$ZEPH_STATE_DIR/$1-$2" ]; then
+        echo "$ZEPH_STATE_DIR/$1-$2"
+    elif [ -f "/tmp/zeph-$1-$2" ] && [ -O "/tmp/zeph-$1-$2" ]; then
+        echo "/tmp/zeph-$1-$2"
+    else
+        return 1
+    fi
+}
+
+# zeph_wrap_timeout <cmd> — bound a CLI invocation below the 10s hooks.json
+# cap, so a cold `npx -y` resolve or a hung network can't eat the whole hook
+# budget. macOS ships no `timeout` in the base system (gtimeout comes from
+# coreutils); with neither present the hooks.json cap is the only bound.
+zeph_wrap_timeout() {
+    if command -v timeout >/dev/null 2>&1; then
+        echo "timeout 8 $1"
+    elif command -v gtimeout >/dev/null 2>&1; then
+        echo "gtimeout 8 $1"
+    else
+        echo "$1"
+    fi
 }
