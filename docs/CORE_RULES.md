@@ -154,7 +154,7 @@ zeph_ask({
 Scan the conversation in reverse, looking for whichever appears first (most recent):
 
 - **(a)** A `tool_result` for a `zeph_ask` you sent where the action id is NOT in `{done, stop, exit}` (case-insensitive) AND the free-text response is NOT a session-ender. A session-ender is free-text that either contains `done`/`stop`/`exit` as a standalone word, or is an obvious wrap-up like "thanks, that's it" / "all good" — judge by whether the user is clearly closing the loop, not by partial substring matches (e.g. "redo" does not count as "done").
-- **(a2)** A user message accompanied by a system note from the Zeph remote-origin detect hook ("This user message arrived from the user's phone…"). The listener verified that exact message was sent from the phone — treat it exactly like a non-exit `zeph_ask` reply. (This note is only ever emitted in environments running the Zeph plugin's hooks; where it never appears, this condition simply never fires.)
+- **(a2)** A user message accompanied by a system note from the Zeph remote-origin detect hook ("This user message arrived from the user's phone…"). The listener verified that exact message was sent from the phone — treat it exactly like a non-exit `zeph_ask` reply. (This note is only ever emitted in environments running Zeph's prompt-submit hooks — the Claude Code plugin, or the hooks `zeph setup` installs for Gemini/Codex; where it never appears, this condition simply never fires.)
 - **(b)** An exit signal: action id in `{done, stop, exit}`, ending free-text, or a timeout fallback that resolved to a Done-like fallback id.
 - **(c)** No `zeph_ask` history and no remote-origin note at all.
 
