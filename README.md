@@ -56,7 +56,7 @@ With `ZEPH_HOOK_ID` configured, Claude prefers `zeph_ask` for decisions and inpu
 | `zeph_clipboard` | Copy to clipboard | When explicitly asked |
 | `zeph_file` | Send a file | When explicitly asked |
 
-> `zeph_ask`, `zeph_prompt`, and `zeph_input` require `ZEPH_HOOK_ID` — enter it during `zeph install`.
+> `zeph_ask`, `zeph_prompt`, and `zeph_input` require a Hook ID — `npx @zeph-to/cli install` issues one automatically during the browser sign-in and saves it to `~/.zeph/config.json` (no env var needed).
 
 ## Mute & Push Mode
 

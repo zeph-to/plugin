@@ -1,12 +1,12 @@
 ---
 name: zeph-config
 description: >
-  Configure Zeph API key and Hook ID for cross-device notifications and
-  remote control. Guides through key creation, environment variable setup,
-  and verification. Run this once during initial setup.
+  Set up Zeph in one command. Runs the CLI installer (browser sign-in,
+  credentials saved to ~/.zeph/config.json), then verifies with a test push.
+  No environment variables, no manual key copying.
 metadata:
   author: zeph-to
-  version: "0.8.0"
+  version: "0.9.0"
   relatedSkills:
     - zeph
     - zeph-status
@@ -22,88 +22,72 @@ metadata:
     - /zeph-config
 ---
 
-Help the user set up Zeph. Follow these steps **in order**; do not skip ahead.
+Set up Zeph for the user. **The entire setup is ONE command** — everything
+else in this skill is verification.
 
-1. Check whether `ZEPH_API_KEY` is already set: run `echo $ZEPH_API_KEY`.
-   - If it prints a key → it's configured. Skip to step 6 (verify).
-   - If empty → continue to step 2.
+## The one command
 
-2. Guide them to create an API key:
-   - Go to Zeph web app → Settings → API Keys
-   - Create a key with the "MCP" preset (includes push:read, push:write,
-     hook:write, channel:read)
-   - Copy the key (starts with `ak_...`)
+```bash
+npx -y @zeph-to/cli install
+```
 
-3. **[Requires a user answer]** Ask whether they want **remote two-way control**
-   (tap a button on their phone to steer the session). Use `zeph_ask` if
-   `ZEPH_HOOK_ID` is already set; otherwise use `AskUserQuestion` (the phone
-   can't drive the terminal until a Hook ID exists). Offer two options:
-   "Two-way remote control" vs "Notifications only".
-   - If they pick two-way: Settings → Developer → Hooks → Create Hook, set
-     hookType to "interactive", copy the Hook ID (starts with `hook_...`).
-   - If they pick notifications-only: skip the Hook ID (leave `ZEPH_HOOK_ID` unset).
+The installer is interactive (browser sign-in + agent picker), so it must run
+in the user's own terminal, not through your Bash tool. Ask them to run it —
+inside a Claude Code session they can type it with a `!` prefix:
 
-4. Persist the env vars in their shell profile (`~/.zshrc` or `~/.bashrc`):
-   ```bash
-   export ZEPH_API_KEY="ak_..."
-   export ZEPH_HOOK_ID="hook_..."  # only if they chose two-way control in step 3
-   ```
+```
+! npx -y @zeph-to/cli install
+```
 
-5. Reload and verify: `source ~/.zshrc && echo $ZEPH_API_KEY`.
+What it does:
+- **Fresh machine**: opens a browser sign-in. The web app issues an API key
+  and an interactive Hook **as a matched pair, automatically** — no copying
+  keys from Settings. The CLI saves everything (`apiKey`, `hookId`,
+  `baseUrl`, `wsUrl`) to `~/.zeph/config.json`.
+- **Already signed in**: keeps the saved credentials and just (re)installs
+  agent integrations. Safe to re-run any time.
+- Installs hooks/MCP for every detected agent (Claude Code, Gemini CLI,
+  Codex CLI, Cursor, …).
 
-6. Send a test notification using `zeph_notify` to confirm end-to-end delivery.
+## Verify (after the user says it finished)
 
-7. Restart Claude Code / Cursor / etc. so the SessionStart hook picks up the
-   new env vars and injects the Zeph remote-control rules into the session.
+1. `cat ~/.zeph/config.json` — must contain `apiKey` and `hookId`.
+2. Send a test push: use `zeph_notify`, or
+   `npx -y @zeph-to/cli notify --title "Zeph connected ✅"`.
+3. Phone buzzed → done. Tell the user to restart their agent session so the
+   SessionStart hook injects the remote-control rules.
 
-## If Things Go Wrong
+## Rules — do NOT re-introduce the old manual flow
 
-**Problem**: "API key is invalid"
-- **Check**: Is the key format correct? Should start with `ak_`
-- **Fix**: Create a new key in Zeph Settings → API Keys, copy again carefully
-- **Verify**: Run `zeph test` to confirm the key works
+- **Single source of truth: `~/.zeph/config.json`.** Every Zeph component
+  (CLI, MCP server, plugin hooks) reads it. Do NOT add `ZEPH_API_KEY` /
+  `ZEPH_HOOK_ID` to `~/.zshrc`, `~/.bashrc`, or `~/.claude/settings.json` —
+  shell exports are unnecessary and create a second, drift-prone copy.
+- Env vars exist only as **advanced overrides** (multi-account, CI). Never
+  suggest them during normal setup.
+- Never walk the user through creating keys or hooks by hand in the web app
+  unless the machine is headless (below).
 
-**Problem**: "zeph_ask times out" or no response
-- **Check**:
-  1. Is Zeph app open on your phone?
-  2. Is ZEPH_HOOK_ID set? (run `echo $ZEPH_HOOK_ID`)
-  3. Did you wait long enough? (default timeout: 120 seconds)
-- **Fix**: 
-  - If ZEPH_HOOK_ID is missing: go to Zeph Settings → Developer → Hooks, create one
-  - If app not open: open the Zeph app on phone and try again
-  - If still timing out: run `zeph test` to check API connection
+## Headless machine (no browser)
 
-**Problem**: "~/.zeph/config.json not found" or "Permission denied"
-- **Check**: Does the file exist? `ls -la ~/.zeph/config.json`
-- **Fix**: 
-  - If missing: run `/zeph-config` again to recreate it
-  - If permission denied: check file ownership `ls -la ~/.zeph/`
-  - Owner should be you. If not: `sudo chown $USER ~/.zeph/*`
+Sign in on any machine WITH a browser and copy the two values from its
+`~/.zeph/config.json`, then on the headless machine:
 
-**Problem**: "Env vars not persisting after restart"
-- **Check**: Did you edit the right shell profile? `cat ~/.zshrc` or `~/.bashrc`
-- **Fix**:
-  1. Open the correct profile file
-  2. Add these lines:
-     ```bash
-     export ZEPH_API_KEY="ak_..."
-     export ZEPH_HOOK_ID="hook_..."  # optional
-     ```
-  3. Save and close
-  4. Restart terminal or run `source ~/.zshrc`
-  5. Verify: `echo $ZEPH_API_KEY` (should print your key, not empty)
+```bash
+npx -y @zeph-to/cli install --key ak_... --hook hook_...
+```
 
-**Problem**: "No notification received after test"
-- **Check**: Is jq installed? (required for hook notifications) `command -v jq`
-- **Fix**: 
-  - macOS: `brew install jq`
-  - Linux: `apt install jq` or `yum install jq`
-  - Then restart Claude Code
+## If things go wrong
 
-**Problem**: "Settings or Developer menu not visible in Zeph app"
-- **Check**: Are you logged in to the Zeph app?
-- **Fix**: 
-  1. Tap avatar or settings icon in app
-  2. Confirm you're logged in
-  3. Settings should be visible
-  4. If still missing: log out and log back in
+**`zeph_ask` 403 Forbidden** — stale key/hook pairing. Re-run
+`npx -y @zeph-to/cli install`; a fresh sign-in issues a consistent pair.
+
+**No notification received** — `command -v jq` (hooks need jq:
+`brew install jq` / `apt install jq`), and confirm the phone app is signed
+in to the SAME account the browser sign-in used.
+
+**`zeph_ask` times out** — phone app open? Answered within the timeout
+(default 120 s)? `npx -y @zeph-to/cli verify` checks installation health.
+
+**config.json missing or corrupt** — re-run the one command; it rewrites
+the file.
