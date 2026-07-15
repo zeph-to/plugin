@@ -160,6 +160,6 @@ zeph notify --key ak_... --title "Deploy 완료"
 ```
 
 ### 5. 다른 AI 에이전트 (Cursor, Windsurf, Gemini, Codex, Copilot, Cline, Aider)에서 쓰고 싶다
-→ **`npx @zeph-to/cli install` 한 번이면 됨.** 설치된 에이전트를 감지해서 각각 MCP 서버 + 알림 훅 + 행동 룰 파일(각 에이전트의 native always-on 위치)을 설정.
+→ **`npm install -g @zeph-to/cli && zeph install` 이면 됨.** 설치된 에이전트를 감지해서 각각 MCP 서버 + 알림 훅 + 행동 룰 파일(각 에이전트의 native always-on 위치)을 설정. (`zeph cc` 안 쓰고 알림만 원하면 `npx @zeph-to/cli install`로 글로벌 설치 생략 가능)
 → 행동 룰(zeph_ask 사용법, sticky REMOTE 등)은 7개 에이전트 모두 동일하게 적용됨 — cli의 templates.ts 공통 코어에서 생성.
 → Claude Code는 plugin이 SessionStart 훅으로 룰 주입, 나머지는 native 룰 파일.
