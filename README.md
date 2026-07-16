@@ -1,4 +1,4 @@
-# Zeph — AI Agent Notifications
+# Zeph — notifications & remote control for AI coding agents
 
 [![release](https://img.shields.io/github/v/release/zeph-to/plugin?label=plugin&sort=semver)](https://github.com/zeph-to/plugin/releases)
 [![marketplace](https://img.shields.io/badge/claude--code-plugin-blueviolet)](https://github.com/zeph-to/plugin)
@@ -6,83 +6,84 @@
 [![mcp-server](https://img.shields.io/npm/v/@zeph-to/mcp-server?label=%40zeph-to%2Fmcp-server)](https://www.npmjs.com/package/@zeph-to/mcp-server)
 [![license](https://img.shields.io/github/license/zeph-to/plugin)](./LICENSE)
 
-Get push notifications on your phone when your AI coding agent finishes work or needs input — and **reply from the phone straight back into your CC session** without touching your terminal.
+**Your agent finishes a build or hits a decision → your phone buzzes → you tap an answer → the session keeps going.** No walking back to the terminal.
 
-Works with Claude Code, Gemini CLI, Cursor, Windsurf, and more.
+Zeph turns any AI coding agent into something you can supervise from your pocket. Get a push the moment Claude finishes real work or needs a call, then answer right there — a button tap or a typed reply flows straight back into the live session.
 
-Built on [`@zeph-to/cli`](https://github.com/zeph-to/cli) (installer, hooks, tmux remote control) and [`@zeph-to/mcp-server`](https://github.com/zeph-to/mcp-server) (the `zeph_ask` family of MCP tools), paired with the [Zeph app](https://zeph.to) on your phone.
+<p align="center">
+  <img src="https://zeph.to/readme/demo.gif" alt="Claude asks 'Deploy to prod?' on your phone; you tap Deploy; the session ships" width="560"><br>
+  <sub><em>Claude asks on your phone → you tap <b>Deploy</b> → the session ships. No terminal.</em></sub>
+</p>
 
-## Quick Start (Claude Code)
+Works with **Claude Code, Cursor, Windsurf, Gemini CLI, Codex, and more.** Built on [`@zeph-to/cli`](https://github.com/zeph-to/cli) (installer, hooks, tmux remote control) and [`@zeph-to/mcp-server`](https://github.com/zeph-to/mcp-server) (the `zeph_ask` family of tools), paired with the [Zeph app](https://zeph.to) on your phone.
+
+---
+
+## Quick start
 
 ```bash
-# Step 1: Install plugin (both commands required)
+# 1. Add the Claude Code plugin
 claude plugin marketplace add zeph-to/plugin
 claude plugin install zeph@zeph
 
-# Step 2: Install the CLI, then configure
+# 2. Install the CLI and wire everything up (opens a browser sign-in)
 npm install -g @zeph-to/cli
-zeph install                              # interactive
-zeph install --key ak_... --hook hook_... # non-interactive (from Zeph app)
+zeph install
 ```
 
-Restart Claude Code after setup. Notifications will start automatically.
+Restart Claude Code — notifications start automatically. That's it. `zeph install` signs you in once, issues a matched API key + hook, and configures every AI agent it finds on your machine. Not near a browser? See [headless setup](#other-agents).
 
-> **Install globally, not `npx`.** A global `zeph` is required for `zeph cc` (drive a session from your phone) and lets the agent hooks skip an npx cold-start on every push. `npx @zeph-to/cli install` still works for a notifications-only setup.
+> **Why global, not `npx`?** A global `zeph` powers `zeph cc` (drive a session from your phone) and lets agent hooks skip an npx cold-start on every push. `npx @zeph-to/cli install` still works for a notifications-only setup.
 
-> **Remote control bonus.** Launch Claude through `zeph cc` (from `@zeph-to/cli`) and the phone's "Active Agents" picker can type into the session directly — no terminal context-switch required. See [cli Remote Control](https://github.com/zeph-to/cli#remote-control) for the one-step setup.
+---
 
-## What You Get
+## What you get
 
-### Automatic — always works, no prompting needed
+**Two things, out of the box:**
 
-| What happens | When |
-|-------------|------|
-| Push: task completion summary | Claude finishes real work (≥2 tool calls, not just reads) |
-| Push: question text | Claude asks you a question |
+### 1. Notifications that just work — no prompting, 100% reliable
 
-These use hooks — shell commands that fire on Claude events. 100% reliable.
+| You get a push when… | Fires on |
+|----------------------|----------|
+| Claude **finishes real work** (a completion summary) | ≥2 tool calls, not just reads |
+| Claude **asks you a question** | any `AskUserQuestion` |
 
-Read-only exploration turns stay quiet, and Claude can fine-tune any single push
-with a Push Signal (force an important one through, or skip a noisy one). You can
-also dial the overall volume — see [Mute & Push Mode](#mute--push-mode).
+These ride on hooks — shell commands that fire on Claude events, independent of whether the model "remembers" to notify you. Read-only turns stay quiet. Dial the volume any time (see [Mute & Push Mode](#mute--push-mode)).
 
-### On request — Claude calls when appropriate
+### 2. Reply from your phone, straight into the session
 
-With `ZEPH_HOOK_ID` configured, Claude prefers `zeph_ask` for decisions and input — showing buttons and a text field together. You can answer from your phone without returning to the terminal.
+With a Hook ID configured (`zeph install` sets one up automatically), Claude ends a turn by **asking you** — buttons *and* a text field, together. Tap **Continue** / **Review** / **Done**, or type `commit and push` / `/ship` / `fix the tests`. Your answer runs immediately, then Claude asks again. This is the **Ask Loop**, and it keeps going until you tap **Done**.
 
-| Tool | What it does | When Claude uses it |
-|------|-------------|---------------------|
-| `zeph_ask` | Buttons + text input combined | Decisions, next steps, custom input |
-| `zeph_prompt` | Pick from 2-4 options | Simple yes/no choices |
-| `zeph_input` | Free-form text input | Text-only input |
-| `zeph_notify` | Manual push notification | When explicitly asked |
-| `zeph_clipboard` | Copy to clipboard | When explicitly asked |
-| `zeph_file` | Send a file | When explicitly asked |
+<p align="center">
+  <img src="https://zeph.to/readme/ask-phone.png" alt="A Zeph hook on the phone: a question with tappable answer buttons and a text field" width="300">
+</p>
 
-> `zeph_ask`, `zeph_prompt`, and `zeph_input` require a Hook ID — `zeph install` issues one automatically during the browser sign-in and saves it to `~/.zeph/config.json` (no env var needed).
+| Tool | What it shows | When Claude reaches for it |
+|------|---------------|----------------------------|
+| `zeph_ask` | buttons **+** text input | decisions, next steps, custom instructions |
+| `zeph_prompt` | 2–4 buttons | simple yes/no / pick-one |
+| `zeph_input` | text field | free-form input only |
+| `zeph_notify` · `zeph_clipboard` · `zeph_file` | one-way push | when you explicitly ask |
 
-## Mute & Push Mode
+> `zeph_ask` / `zeph_prompt` / `zeph_input` need a Hook ID — issued for you during sign-in and saved to `~/.zeph/config.json`. No env vars.
 
-Too many notifications? Mute them, or dial the volume, for the current project:
+---
 
-```
-/zeph-mute      — Disable all notifications for this project
-/zeph-unmute    — Re-enable notifications
-/zeph-status    — Check current state (mute + push mode)
+## Drive a session end-to-end from your phone
 
-/zeph-quiet     — Only high-priority pushes reach you
-/zeph-loud      — Push on every turn
-/zeph-normal    — Restore the default (push on real work, quiet on reads)
+Launch Claude through `zeph cc` and the phone's **Active Agents** picker can type directly into the running session — even after a `zeph_ask` window has closed. Start a refactor from the couch, answer follow-ups over lunch, come back to a finished branch.
+
+```bash
+zeph cc          # claude in a named tmux session the phone can reach
+zeph codex       # same for Codex
+zeph gemini      # same for Gemini
 ```
 
-These create a state file under `${XDG_STATE_HOME:-~/.local/state}/zeph`, keyed
-by project directory — it persists until you undo it (`/zeph-unmute`,
-`/zeph-normal`), including across reboots and new sessions in the same project.
-Mute silences both hooks (auto-notifications) and CLI calls, and overrides any
-push mode. Files written to `/tmp` by older versions are still honored when
-owned by you.
+One-step setup and the full architecture live in [cli → Remote Control](https://github.com/zeph-to/cli#remote-control).
 
-## Autonomous Mode
+---
+
+## Autonomous mode
 
 Hand Claude a time budget and walk away:
 
@@ -90,139 +91,65 @@ Hand Claude a time budget and walk away:
 /zeph-auto 2h fix the flaky tests
 ```
 
-Claude loops explore → plan → implement → verify → commit until the budget runs
-out, committing each verified unit on a work branch. Questions arrive on your
-phone as `zeph_ask` buttons with a stated default — answer to steer, or ignore
-and the run proceeds on the safe default after the timeout. Irreversible actions
-(push, deploy, deletion) are never taken on a timeout; they wait for an explicit
-tap. The run ends with a report of what was committed, what was skipped, and
-which decisions were auto-defaulted — plus buttons to extend, review, or finish.
+Claude loops explore → plan → implement → verify → commit until the budget runs out, committing each verified unit on a work branch. Questions arrive on your phone as `zeph_ask` buttons **with a stated default** — answer to steer, or ignore and the run proceeds on the safe default after the timeout. Irreversible actions (push, deploy, delete) never happen on a timeout; they wait for an explicit tap. The run ends with a report of what was committed, skipped, and auto-defaulted — plus buttons to extend, review, or finish.
 
-Duration accepts `2h`, `90m`, `1h30m`, or plain minutes (default `1h`).
-`/zeph-status` shows the remaining budget mid-run.
+Duration takes `2h`, `90m`, `1h30m`, or plain minutes (default `1h`). `/zeph-status` shows the remaining budget mid-run.
 
-## How It Works
+---
 
-### Session Flow
+## Mute & Push Mode
+
+Too many pushes? Silence or dial the volume, per project:
 
 ```
-SessionStart hook
-  ├─ Read ~/.zeph/config.json
-  ├─ HOOK_ID present → inject ask/prompt/input rules
-  └─ HOOK_ID absent  → inject notify-only rules
+/zeph-mute      Disable all notifications for this project
+/zeph-unmute    Re-enable them
+/zeph-status    Show current state (mute + push mode)
 
-Working...
-  │
-  ├─ Choices + input needed → zeph_ask → button or text reply from mobile
-  │   Button tap or custom input → Claude continues working
-  │
-  ├─ Complex question → AskUserQuestion → Ask hook auto-push
-  │   "Can you see the Xcode logs?" → mobile notification → switch to terminal
-  │
-  ├─ Task complete → zeph_ask "Done. Next?" → user picks or types
-  │   Response treated as direct instruction → execute → loop
-  │   Select "Done" → session ends
-  │
-  └─ Fallback: if AI skipped zeph_ask → Stop hook sends notify
+/zeph-quiet     Only high-priority pushes reach you
+/zeph-loud      Push on every turn
+/zeph-normal    Restore the default (push on real work, quiet on reads)
 ```
 
-### Ask Loop
+State lives in a file under `${XDG_STATE_HOME:-~/.local/state}/zeph`, keyed by project directory — it survives reboots and new sessions until you undo it. Mute silences both hooks and CLI calls and overrides any push mode.
 
-When `ZEPH_HOOK_ID` is configured, Claude uses `zeph_ask` as its final action after completing work. The user can respond from their phone:
+---
 
-- **Tap a button** — e.g. "Continue", "Review", "Done"
-- **Type text** — e.g. "commit and push", "/ship", "fix the tests"
+## Other agents
 
-The response is executed immediately without confirmation, then Claude sends another `zeph_ask`. This loop continues until the user selects "Done". If the AI skips `zeph_ask`, the Stop hook sends a one-way notification as fallback.
-
-The loop also starts from the phone side: when you send a message via the app's agent chat, the `zeph listener` records exactly what it injected and the plugin's UserPromptSubmit hook verifies the match — Claude then knows you're remote and enters the ask loop on its own, even for lightweight turns it would otherwise end silently (ADR-0002).
-
-### Notification Summary
-
-| Event | Source | Reliability | Duplicates |
-|-------|--------|-------------|------------|
-| Task completed | Stop hook | 100% | No (skipped if AI sent zeph_ask) |
-| Question asked | Ask hook | 100% | No |
-| Decision/input needed | MCP zeph_ask | ~80% (depends on AI calling the tool) | No |
-| Decision only | MCP zeph_prompt | ~80% (depends on AI calling the tool) | No |
-| Text input only | MCP zeph_input | ~80% (depends on AI calling the tool) | No |
-| Manual notification | MCP zeph_notify | On request | No |
-
-### Three Layers
-
-```
-zeph-to/plugin (Claude Code plugin)
-  ├─ hooks/zeph-setup.js    → SessionStart: inject rules
-  ├─ hooks/zeph-stop.sh     → Stop: auto completion notification
-  ├─ hooks/zeph-ask.sh      → PreToolUse: question notification
-  ├─ hooks/zeph-remote.sh   → UserPromptSubmit: phone-sent message → REMOTE mode
-  ├─ .mcp.json              → MCP server registration
-  └─ uses:
-      ├─ @zeph-to/cli     → CLI (notify/list/dismiss/test/setup)
-      └─ @zeph-to/mcp-server   → MCP tools (ask/prompt/input/clipboard/file...)
-```
-
-| Layer | Package | What it does | Reliability |
-|-------|---------|-------------|-------------|
-| **Hooks** | `@zeph-to/cli` (CLI) | Auto-fires on Claude events | 100% — no AI cooperation needed |
-| **MCP Server** | `@zeph-to/mcp-server` | AI-callable tools (ask, prompt, input...) | Depends on AI following rules |
-| **Plugin** | `zeph-to/plugin` | Bundles hooks + MCP + behavior rules | Installed once |
-
-### Config Priority
-
-```
---key flag  →  ZEPH_API_KEY env var  →  ~/.zeph/config.json
-    (CLI)         (shell)               (zeph setup)
-```
-
-## Setup Details
-
-### `zeph install` — Setup
+`zeph install` isn't Claude-only — it detects **every** agent on your machine and configures each one (MCP server + notification hooks + a behavioral rule file in that agent's native always-on location):
 
 ```bash
 npm install -g @zeph-to/cli
 zeph install
 ```
 
-Detects installed agents, prompts for credentials (opens browser sign-in when none are saved), installs hooks + MCP + rules for each agent. Already inside Claude Code? `/zeph-config` walks through the same setup conversationally. Install globally so `zeph cc` works and hooks skip an npx cold-start; `npx @zeph-to/cli install` is the notifications-only alternative.
+| Agent | Auto notify | MCP tools | How |
+|-------|:-----------:|:---------:|-----|
+| Claude Code | ✓ Stop hook | ✓ | Plugin |
+| Cursor | ✓ stop hook | ✓ | MCP + hook + rules |
+| Windsurf | ✓ response hook | ✓ | MCP + hook + rules |
+| Gemini CLI | ✓ AfterAgent hook | ✓ | MCP + hook |
+| Codex CLI | ✓ Stop hook | — | Hook + rules |
+| Copilot CLI | ✓ sessionEnd hook | — | Hook + rules |
+| Cline | LLM-based | — | Rules file |
+| Aider | LLM-based | — | Conventions file |
 
-- **API Key** (required) — Open Zeph app → Settings → API Keys → Create new key
-- **Hook ID** (optional, for `zeph_ask`/`zeph_prompt`/`zeph_input`) — Settings → Developer → Hooks → Create new hook
-
-Saves to `~/.zeph/config.json`. All Zeph tools (CLI, MCP server, plugin hooks) read this file.
-
-### Dependencies
-
-- **Node.js** (required) — for MCP server and CLI
-- **jq** (recommended) — for auto-notifications (Stop/Ask hooks). Without jq, hooks are disabled silently. A warning is shown at session start. Install: `brew install jq` (macOS) or `apt install jq` (Linux)
-
-### Encryption
-
-Push bodies are encrypted with AES-256-GCM. The wrapping key is derived via ECDH P-256 and synced across your own devices on first run so all your devices can read the same push. Toggle encryption in the Zeph app (Settings → Encryption); when disabled, the MCP server and CLI send plaintext.
-
-**Threat model honesty:** keys are persisted on the Zeph backend to enable cross-device sync, so this is *device-shared* encryption — it protects push contents from passive network observers and from a leaked database snapshot taken without the key store, but it does **not** protect against the Zeph backend itself (it has the keys it serves to your devices). A true E2E mode (per-device keypairs, server stores only public keys, no key escrow) is on the roadmap. Until then, treat push bodies as sensitive-but-not-secret.
-
-## Other Agents
-
-### Setup (all agents)
+**Headless box (no browser):** sign in on any machine with a browser, then copy the two values from its `~/.zeph/config.json`:
 
 ```bash
-npm install -g @zeph-to/cli
-zeph install
+zeph install --key ak_... --hook hook_...
 ```
 
-Detects every installed agent (Cursor, Windsurf, Gemini CLI, Codex CLI, Copilot CLI, Cline, Aider) and configures each one — MCP server, notification hooks, and the behavioral rule file in that agent's native always-on location. This is the single supported installer.
-
-### Manual MCP setup (if you prefer)
+<details>
+<summary><b>Manual MCP setup</b> (if you'd rather not run the installer)</summary>
 
 **Gemini CLI:**
-
 ```bash
 gemini mcp add zeph -- npx -y @zeph-to/mcp-server
 ```
 
-**Cursor** — add to `~/.cursor/mcp.json`:
-
+**Cursor** — add to `~/.cursor/mcp.json` (Windsurf: `~/.codeium/windsurf/mcp_config.json`, same shape):
 ```json
 {
   "mcpServers": {
@@ -234,72 +161,110 @@ gemini mcp add zeph -- npx -y @zeph-to/mcp-server
   }
 }
 ```
+</details>
 
-**Windsurf** — add to `~/.codeium/windsurf/mcp_config.json` (same format as Cursor).
+---
 
-## CLI Reference
+## How it works
+
+Zeph is three cooperating layers. Hooks fire whether or not the model cooperates; MCP tools give the model a way to reach you on purpose.
+
+```
+zeph-to/plugin (Claude Code plugin)
+  ├─ hooks/zeph-setup.js   → SessionStart: inject the behavioral rules
+  ├─ hooks/zeph-stop.sh    → Stop: auto completion push
+  ├─ hooks/zeph-ask.sh     → PreToolUse: question push
+  ├─ hooks/zeph-remote.sh  → UserPromptSubmit: phone-sent message → REMOTE mode
+  ├─ .mcp.json             → registers the MCP server
+  └─ builds on:
+      ├─ @zeph-to/cli         → hooks + notify/list/dismiss + tmux remote control
+      └─ @zeph-to/mcp-server  → zeph_ask / zeph_prompt / zeph_input / clipboard / file …
+```
+
+| Layer | Package | Role | Reliability |
+|-------|---------|------|-------------|
+| **Hooks** | `@zeph-to/cli` | auto-fire on Claude events | 100% — no AI cooperation needed |
+| **MCP server** | `@zeph-to/mcp-server` | AI-callable tools (ask, prompt, input…) | depends on the model following rules |
+| **Plugin** | `zeph-to/plugin` | bundles hooks + MCP + rules | installed once |
+
+<details>
+<summary><b>Session flow & the Ask Loop</b></summary>
+
+```
+SessionStart hook
+  ├─ read ~/.zeph/config.json
+  ├─ HOOK_ID present → inject ask/prompt/input rules
+  └─ HOOK_ID absent  → inject notify-only rules
+
+Working…
+  ├─ Choice/input needed → zeph_ask → button or text reply from mobile → continue
+  ├─ Complex question    → AskUserQuestion → Ask hook push → answer at terminal
+  ├─ Task complete       → zeph_ask "Done. Next?" → pick or type → execute → loop
+  │                          └─ tap "Done" → session ends
+  └─ Fallback: AI skipped zeph_ask → Stop hook sends a one-way push
+```
+
+When a Hook ID is set, Claude uses `zeph_ask` as its final action after real work. Your reply is treated as a direct instruction — executed without re-confirming — then Claude asks again. The loop also starts **from the phone**: send a message via the app's agent chat and the `zeph listener` records exactly what it injected; the plugin's UserPromptSubmit hook verifies the match and Claude knows you're remote (ADR-0002).
+</details>
+
+<details>
+<summary><b>Notification matrix</b> — who fires what, and can it double up</summary>
+
+| Event | Source | Reliability | Duplicates |
+|-------|--------|-------------|------------|
+| Task completed | Stop hook | 100% | No (skipped if AI already sent `zeph_ask`) |
+| Question asked | Ask hook | 100% | No |
+| Decision / input needed | `zeph_ask` | ~80% (AI must call it) | No |
+| Decision only | `zeph_prompt` | ~80% | No |
+| Text input only | `zeph_input` | ~80% | No |
+| Manual push | `zeph_notify` | on request | No |
+</details>
+
+---
+
+## CLI reference
 
 ```bash
-zeph <command>   # or: npx @zeph-to/cli <command>
+zeph <command>       # or: npx @zeph-to/cli <command>
 ```
 
 | Command | Description |
 |---------|-------------|
-| `login` | Browser sign-in — auto-fetches API key + hook into `~/.zeph/config.json` |
-| `install` | One-command setup for all agents |
-| `notify --title "..." --body "..."` | Send a push |
-| `list [--limit 5] [--type note]` | List recent pushes |
-| `dismiss <push-id>` or `--all` | Dismiss pushes |
-| `test` | Verify connection |
+| `install` | one-command setup for every detected agent |
+| `login` | browser sign-in — refresh credentials into `~/.zeph/config.json` |
+| `notify --title "…" --body "…"` | send a push |
+| `list [--limit 5] [--type note]` | list recent pushes |
+| `dismiss <id>` · `--all` | mark pushes read |
+| `cc` · `codex` · `gemini` | run the agent in a phone-reachable tmux session |
+| `test` | verify connection |
 
-**Session commands (Claude Code only):**
+**Session commands (Claude Code):** `/zeph-config` (guided setup) · `/zeph-auto [duration] [task]` · `/zeph-mute` · `/zeph-unmute` · `/zeph-status` · `/zeph-quiet` · `/zeph-loud` · `/zeph-normal`.
 
-| Command | Description |
-|---------|-------------|
-| `/zeph-config` | Guided setup: API key + Hook ID, with verification |
-| `/zeph-auto [duration] [task]` | Time-boxed autonomous work session |
-| `/zeph-mute` | Mute notifications for this project |
-| `/zeph-unmute` | Re-enable notifications |
-| `/zeph-status` | Check mute + push-mode status |
-| `/zeph-quiet` | Push mode: only high-priority pushes |
-| `/zeph-loud` | Push mode: push on every turn |
-| `/zeph-normal` | Push mode: restore the default |
+Full CLI, SDK, and listener docs: [`@zeph-to/cli`](https://github.com/zeph-to/cli).
 
-## Agent Support Matrix
+---
 
-| Agent | Auto Notify | MCP Tools | How |
-|-------|:-----------:|:---------:|-----|
-| Claude Code | Yes (Stop hook) | Yes | Plugin |
-| Cursor | Yes (stop hook) | Yes | MCP + hook + rules |
-| Windsurf | Yes (response hook) | Yes | MCP + hook |
-| Gemini CLI | Yes (AfterAgent hook) | Yes | MCP + hook |
-| Codex CLI | Yes (Stop hook) | — | Hook |
-| Copilot CLI | Yes (sessionEnd hook) | — | Hook |
-| Cline | LLM-based | — | Skills |
-| Aider | LLM-based | — | Skills |
+## Encryption
 
-Run `zeph install` to configure every detected agent at once — MCP server, notification hooks, and behavioral rules.
+Push bodies are encrypted with AES-256-GCM; the wrapping key is derived via ECDH P-256 and synced across your own devices on first run. Toggle it in the app (Settings → Encryption); when off, pushes go plaintext. No config needed.
+
+**Threat model, honestly:** keys are persisted on the Zeph backend to enable cross-device sync, so this is *device-shared* encryption — not true end-to-end. It protects push contents from passive network observers and from a leaked database snapshot taken without the key store, but **not** from the Zeph backend itself. A true E2E mode (per-device keypairs, no key escrow) is on the roadmap. Until then, treat push bodies as sensitive-but-not-secret.
+
+---
 
 ## Uninstall
 
-**All agents at once:**
-
 ```bash
-zeph uninstall          # remove Zeph from every detected agent
-zeph uninstall --dry-run  # preview first
-zeph uninstall --purge    # also delete ~/.zeph/config.json
+zeph uninstall              # remove Zeph from every detected agent
+zeph uninstall --dry-run    # preview first
+zeph uninstall --purge      # also delete ~/.zeph/config.json
 ```
 
-This reverses `zeph install` for every detected agent — removing MCP entries, hooks, and rule files. It only touches Zeph's own artifacts: shared rule files (Windsurf/Gemini/Codex) keep your content, with just the `<!-- ZEPH:START -->` / `<!-- ZEPH:END -->` block stripped. The Claude Code plugin is removed via `claude plugin uninstall zeph@zeph`.
+Reverses `zeph install` everywhere — MCP entries, hooks, and rule files. It only touches Zeph's own artifacts: shared rule files keep your content, with just the `<!-- ZEPH:START -->…<!-- ZEPH:END -->` block stripped. Remove the Claude Code plugin with `claude plugin uninstall zeph@zeph`.
 
-**Claude Code only:**
+---
 
-```bash
-claude plugin uninstall zeph@zeph
-rm ~/.zeph/config.json
-```
-
-## Deep Dives
+## Deep dives
 
 - [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) — how the plugin, CLI, and MCP server fit together
 - [docs/CORE_RULES.md](./docs/CORE_RULES.md) — the authoritative behavioral rules injected at session start
