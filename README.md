@@ -19,12 +19,15 @@ Built on [`@zeph-to/cli`](https://github.com/zeph-to/cli) (installer, hooks, tmu
 claude plugin marketplace add zeph-to/plugin
 claude plugin install zeph@zeph
 
-# Step 2: Configure — pick one:
-npx @zeph-to/cli install                              # interactive
-npx @zeph-to/cli install --key ak_... --hook hook_... # non-interactive (from Zeph app)
+# Step 2: Install the CLI, then configure
+npm install -g @zeph-to/cli
+zeph install                              # interactive
+zeph install --key ak_... --hook hook_... # non-interactive (from Zeph app)
 ```
 
 Restart Claude Code after setup. Notifications will start automatically.
+
+> **Install globally, not `npx`.** A global `zeph` is required for `zeph cc` (drive a session from your phone) and lets the agent hooks skip an npx cold-start on every push. `npx @zeph-to/cli install` still works for a notifications-only setup.
 
 > **Remote control bonus.** Launch Claude through `zeph cc` (from `@zeph-to/cli`) and the phone's "Active Agents" picker can type into the session directly — no terminal context-switch required. See [cli Remote Control](https://github.com/zeph-to/cli#remote-control) for the one-step setup.
 
@@ -56,7 +59,7 @@ With `ZEPH_HOOK_ID` configured, Claude prefers `zeph_ask` for decisions and inpu
 | `zeph_clipboard` | Copy to clipboard | When explicitly asked |
 | `zeph_file` | Send a file | When explicitly asked |
 
-> `zeph_ask`, `zeph_prompt`, and `zeph_input` require a Hook ID — `npx @zeph-to/cli install` issues one automatically during the browser sign-in and saves it to `~/.zeph/config.json` (no env var needed).
+> `zeph_ask`, `zeph_prompt`, and `zeph_input` require a Hook ID — `zeph install` issues one automatically during the browser sign-in and saves it to `~/.zeph/config.json` (no env var needed).
 
 ## Mute & Push Mode
 
@@ -174,13 +177,14 @@ zeph-to/plugin (Claude Code plugin)
 
 ## Setup Details
 
-### `zeph install` — One-Command Setup
+### `zeph install` — Setup
 
 ```bash
-npx @zeph-to/cli install
+npm install -g @zeph-to/cli
+zeph install
 ```
 
-Detects installed agents, prompts for credentials (opens browser sign-in when none are saved), installs hooks + MCP + rules for each agent. Already inside Claude Code? `/zeph-config` walks through the same setup conversationally.
+Detects installed agents, prompts for credentials (opens browser sign-in when none are saved), installs hooks + MCP + rules for each agent. Already inside Claude Code? `/zeph-config` walks through the same setup conversationally. Install globally so `zeph cc` works and hooks skip an npx cold-start; `npx @zeph-to/cli install` is the notifications-only alternative.
 
 - **API Key** (required) — Open Zeph app → Settings → API Keys → Create new key
 - **Hook ID** (optional, for `zeph_ask`/`zeph_prompt`/`zeph_input`) — Settings → Developer → Hooks → Create new hook
@@ -200,10 +204,11 @@ Push bodies are encrypted with AES-256-GCM. The wrapping key is derived via ECDH
 
 ## Other Agents
 
-### One-command setup (all agents)
+### Setup (all agents)
 
 ```bash
-npx @zeph-to/cli install
+npm install -g @zeph-to/cli
+zeph install
 ```
 
 Detects every installed agent (Cursor, Windsurf, Gemini CLI, Codex CLI, Copilot CLI, Cline, Aider) and configures each one — MCP server, notification hooks, and the behavioral rule file in that agent's native always-on location. This is the single supported installer.
@@ -235,7 +240,7 @@ gemini mcp add zeph -- npx -y @zeph-to/mcp-server
 ## CLI Reference
 
 ```bash
-npx @zeph-to/cli <command>
+zeph <command>   # or: npx @zeph-to/cli <command>
 ```
 
 | Command | Description |
@@ -273,16 +278,16 @@ npx @zeph-to/cli <command>
 | Cline | LLM-based | — | Skills |
 | Aider | LLM-based | — | Skills |
 
-Run `npx @zeph-to/cli install` to configure every detected agent at once — MCP server, notification hooks, and behavioral rules.
+Run `zeph install` to configure every detected agent at once — MCP server, notification hooks, and behavioral rules.
 
 ## Uninstall
 
 **All agents at once:**
 
 ```bash
-npx @zeph-to/cli uninstall          # remove Zeph from every detected agent
-npx @zeph-to/cli uninstall --dry-run  # preview first
-npx @zeph-to/cli uninstall --purge    # also delete ~/.zeph/config.json
+zeph uninstall          # remove Zeph from every detected agent
+zeph uninstall --dry-run  # preview first
+zeph uninstall --purge    # also delete ~/.zeph/config.json
 ```
 
 This reverses `zeph install` for every detected agent — removing MCP entries, hooks, and rule files. It only touches Zeph's own artifacts: shared rule files (Windsurf/Gemini/Codex) keep your content, with just the `<!-- ZEPH:START -->` / `<!-- ZEPH:END -->` block stripped. The Claude Code plugin is removed via `claude plugin uninstall zeph@zeph`.
