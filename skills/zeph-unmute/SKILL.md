@@ -5,7 +5,7 @@ description: >
   notifications from Stop and AskUserQuestion hooks. Use after /zeph-mute to turn them back on.
 metadata:
   author: zeph-to
-  version: "0.8.0"
+  version: "0.9.0"
   relatedSkills:
     - zeph
     - zeph-mute

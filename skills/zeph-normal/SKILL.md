@@ -7,7 +7,7 @@ description: >
   machine-wide default with `--global`.
 metadata:
   author: zeph-to
-  version: "0.8.0"
+  version: "0.9.0"
   relatedSkills:
     - zeph
     - zeph-quiet

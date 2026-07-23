@@ -5,7 +5,7 @@ description: >
   from Stop and AskUserQuestion hooks. Use /zeph-unmute to re-enable.
 metadata:
   author: zeph-to
-  version: "0.8.0"
+  version: "0.9.0"
   relatedSkills:
     - zeph
     - zeph-unmute
