@@ -301,6 +301,34 @@ clear_pushmode
 run_hook "$FIXTURES/main-readonly-only.jsonl"
 assert "no mode → B1 floor applies again" zeph_silent
 
+echo
+echo "[push mode: global default — /zeph-quiet --global]"
+# `pushmode-default` is the machine-wide fallback, consulted only when the
+# project has no dial of its own (state dir or legacy /tmp).
+mkdir -p "$WORK/state/zeph"
+printf 'quiet' > "$WORK/state/zeph/pushmode-default"
+run_hook "$FIXTURES/main-2-tools.jsonl"
+assert "global quiet suppresses a normal push"          zeph_silent
+run_hook "$FIXTURES/main-marker-high.jsonl"
+assert "global quiet still lets a high marker through"  zeph_called
+# A per-project dial outranks it — that's how /zeph-normal opts one project out.
+GLOBAL_PROJECT="$WORK/global-project"
+mkdir -p "$GLOBAL_PROJECT"
+GP_HASH=$(printf '%s' "$GLOBAL_PROJECT" | cksum | cut -d' ' -f1)
+printf 'normal' > "$WORK/state/zeph/pushmode-$GP_HASH"
+run_hook "$FIXTURES/main-2-tools.jsonl" "$GLOBAL_PROJECT"
+assert "project dial overrides the global default"      zeph_called
+rm -f "$WORK/state/zeph/pushmode-default" "$WORK/state/zeph/pushmode-$GP_HASH"
+
+echo
+echo "[mute has no global default — project-only by design]"
+# Mute is presence-keyed, so a global mute file could never be lifted for a
+# single project. Only `pushmode` falls back to `-default`; lock that here.
+touch "$WORK/state/zeph/muted-default"
+run_hook "$FIXTURES/main-2-tools.jsonl"
+assert "muted-default does not silence an unmuted project" zeph_called
+rm -f "$WORK/state/zeph/muted-default"
+
 # ── summary ────────────────────────────────────────────────────────────────
 
 echo

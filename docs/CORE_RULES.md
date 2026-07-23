@@ -191,7 +191,7 @@ The moment the user picks an action id matching `done`/`stop`/`exit` (case-insen
 
 ### Mute
 
-12. If the user ran `/zeph-mute` for this project, the Stop and Ask hooks stay silent (driven by a per-project marker file that persists until `/zeph-unmute`). MCP tools still work but don't call them unless the user explicitly asks. `/zeph-unmute` lifts it. The user can also dial the auto-push volume without full silence: `/zeph-quiet` (only high-priority pushes), `/zeph-loud` (push every turn), `/zeph-normal` (default). This is a project-level override above your per-turn Push Signal; `/zeph-status` shows the current mode. Mute overrides all of them.
+12. If the user ran `/zeph-mute` for this project, the Stop and Ask hooks stay silent (driven by a per-project marker file that persists until `/zeph-unmute`). MCP tools still work but don't call them unless the user explicitly asks. `/zeph-unmute` lifts it. The user can also dial the auto-push volume without full silence: `/zeph-quiet` (only high-priority pushes), `/zeph-loud` (push every turn), `/zeph-normal` (default). This is a project-level override above your per-turn Push Signal; each dial also takes `--global` to set the machine-wide default for projects with no dial of their own (per-project always wins). `/zeph-status` shows the current mode and which scope it came from. Mute overrides all of them.
 
 ### Persistence
 

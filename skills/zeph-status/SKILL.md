@@ -37,9 +37,15 @@ if [ -f "$STATE_DIR/muted-$HASH" ] || { [ -f "/tmp/zeph-muted-$HASH" ] && [ -O "
 else
   echo "ACTIVE"
 fi
-MODE=$(cat "$STATE_DIR/pushmode-$HASH" 2>/dev/null)
-[ -z "$MODE" ] && [ -f "/tmp/zeph-pushmode-$HASH" ] && [ -O "/tmp/zeph-pushmode-$HASH" ] && MODE=$(cat "/tmp/zeph-pushmode-$HASH")
-echo "PUSH MODE: ${MODE:-normal}"
+MODE=""; SCOPE=""
+if [ -f "$STATE_DIR/pushmode-$HASH" ]; then
+  MODE=$(cat "$STATE_DIR/pushmode-$HASH"); SCOPE="this project"
+elif [ -f "/tmp/zeph-pushmode-$HASH" ] && [ -O "/tmp/zeph-pushmode-$HASH" ]; then
+  MODE=$(cat "/tmp/zeph-pushmode-$HASH"); SCOPE="this project"
+elif [ -f "$STATE_DIR/pushmode-default" ]; then
+  MODE=$(cat "$STATE_DIR/pushmode-default"); SCOPE="global default"
+fi
+echo "PUSH MODE: ${MODE:-normal}${SCOPE:+ ($SCOPE)}"
 if [ -f "$STATE_DIR/auto-$HASH" ]; then
   read -r DEADLINE MINUTES < "$STATE_DIR/auto-$HASH"
   echo "AUTO MODE: $(( (DEADLINE - $(date +%s)) / 60 ))m remaining of ${MINUTES}m"
@@ -52,6 +58,10 @@ Report the result in your own words:
 - `PUSH MODE: normal` → default (push on real work, silent on read-only).
 - `PUSH MODE: quiet` → only high-priority pushes; `/zeph-normal` restores default.
 - `PUSH MODE: loud` → every turn pushes; `/zeph-normal` restores default.
+- The parenthetical says where the mode came from: `this project` (a dial set
+  here) or `global default` (set with `--global`, inherited by every project
+  that has none of its own). `/zeph-normal` overrides it here; `/zeph-normal
+  --global` clears it everywhere.
 - `AUTO MODE: ...` → a `/zeph-auto` session is running with that much budget left.
 
 (Push mode only applies when not muted — mute overrides everything.)

@@ -60,6 +60,9 @@ above your per-turn Push Signal; mute still overrides it):
 - `/zeph-loud` — push on every turn
 - `/zeph-normal` — restore the default heuristic
 
+Each dial also takes `--global`, which sets the machine-wide default for every
+project that has no dial of its own; a per-project dial always wins over it.
+
 ## When NOT to Use
 
 - Short responses the user can see immediately in the terminal
