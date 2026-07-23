@@ -135,6 +135,11 @@ zeph notify --title "dev test"
 hook의 자동 푸시 볼륨을 조절. mute가 완전 침묵이라면 push mode는 그 사이 다이얼:
 
 - `/zeph-quiet` → `high` 마커만 통과 · `/zeph-loud` → 매 턴 푸시 · `/zeph-normal` → 기본
+- **Scope:** 기본은 프로젝트 단위. `--global`을 붙이면 해시 없는 `pushmode-default`에
+  기록되어, 자기 다이얼이 없는 모든 프로젝트의 기본값이 됨. 해석 순서는
+  프로젝트 파일 > (구버전) `/tmp` 파일 > `pushmode-default` > `normal` —
+  프로젝트 다이얼이 항상 전역을 이김. mute에는 전역 형태가 없음: 내용이 아니라
+  존재로 판정하는 파일이라 특정 프로젝트만 해제할 방법이 없기 때문.
 - **우선순위:** mute > push mode > (모델의) per-turn Push Signal 마커 > 볼륨 휴리스틱.
 - Push Signal 마커(`<!-- zeph: skip|push|high -->`)는 모델이 응답에 emit → Stop hook이
   읽어 그 턴의 푸시를 조정(읽고 본문에서 strip).

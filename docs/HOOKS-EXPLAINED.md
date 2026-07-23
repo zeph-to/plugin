@@ -72,7 +72,9 @@ echo $ZEPH_API_KEY
 - Decides whether to push using a layered gate (most-specific first):
   1. **Muted** (`/zeph-mute`) → always silent
   2. **Push mode** (user dial): `/zeph-quiet` → push only on a `high` marker;
-     `/zeph-loud` → push every turn; `/zeph-normal` (default) → fall through
+     `/zeph-loud` → push every turn; `/zeph-normal` (default) → fall through.
+     Read from this project's dial file, else the machine-wide default written
+     by `--global` (e.g. `/zeph-quiet --global`), else normal
   3. **Push Signal marker** the model may emit in its response —
      `<!-- zeph: skip -->` suppress, `<!-- zeph: push -->` force, `<!-- zeph: high -->`
      force + high priority (the marker is stripped from the push body)
@@ -114,7 +116,7 @@ Claude runs: [call tool 1] [call tool 2] → response "Built and committed."
   ↓
 Stop hook fires:
   1. Check mute file → not muted ✓
-  2. Check push mode → normal (no /zeph-quiet|/zeph-loud) ✓
+  2. Check push mode → normal (no project dial, no --global default) ✓
   3. Check jq installed → yes ✓
   4. Read transcript; find last real user message (index N)
   5. Count zeph_ask calls → 0 (no duplicate) ✓
@@ -159,7 +161,9 @@ jq -r '.[] | select(.role=="assistant") | .message.content? // empty' \
 **Why sometimes silent:**
 - Tool count < 2, or all tools were read-only (Read/Grep/Glob), with no marker
 - The response emitted a `<!-- zeph: skip -->` Push Signal
-- Push mode is `/zeph-quiet` and the turn had no `high` marker
+- Push mode is `/zeph-quiet` and the turn had no `high` marker — set for this
+  project, or inherited from a `/zeph-quiet --global` default (`/zeph-status`
+  says which)
 - jq not installed (hook exits early)
 - Project is muted (`/zeph-mute` was run)
 - Mute file still exists (stale from previous session)
