@@ -48,7 +48,7 @@ Restart Claude Code — notifications start automatically. That's it. `zeph inst
 | Claude **finishes real work** (a completion summary) | ≥2 tool calls, not just reads |
 | Claude **asks you a question** | any `AskUserQuestion` |
 
-These ride on hooks — shell commands that fire on Claude events, independent of whether the model "remembers" to notify you. Read-only turns stay quiet. Dial the volume any time (see [Mute & Push Mode](#mute--push-mode)).
+These ride on hooks — shell commands that fire on Claude events, independent of whether the model "remembers" to notify you. Read-only turns stay quiet. They fire in **every** Claude Code session, not only ones launched with `zeph cc` — that command is the phone-control bridge, not the notification switch. Dial the volume any time, per project or machine-wide (see [Mute & Push Mode](#mute--push-mode)).
 
 ### 2. Reply from your phone, straight into the session
 
