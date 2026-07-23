@@ -7,7 +7,7 @@ description: >
   Start ONLY on explicit user request (e.g. /zeph-auto 2h). Requires ZEPH_HOOK_ID.
 metadata:
   author: zeph-to
-  version: "0.8.0"
+  version: "0.9.0"
   relatedSkills:
     - zeph
     - zeph-status

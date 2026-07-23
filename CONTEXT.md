@@ -39,6 +39,9 @@ A **user**-set session preference that dials the Stop-hook Push volume, sitting 
 level above the model's per-turn Push Signal. Three modes — **normal** (the default
 heuristic decides), **quiet** (only high-priority pushes survive), **loud** (every
 turn pushes) — set via `/zeph-quiet` / `/zeph-loud` / `/zeph-normal`, mirroring the
-mute mechanism. Distinct from **Mute**, which is total silence and overrides any
-Push Mode. Where they conflict, the user's Push Mode wins over the model's Push
+mute mechanism. Each dial also takes `--global`, writing the hash-less
+`pushmode-default` that every project without its own dial falls back to; a
+project dial always outranks it. Distinct from **Mute**, which is total silence,
+overrides any Push Mode, and has no `--global` form (presence-keyed, so it could
+never be lifted for one project). Where they conflict, the user's Push Mode wins over the model's Push
 Signal (an explicit session preference outranks a per-turn hint).

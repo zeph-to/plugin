@@ -48,7 +48,7 @@ Restart Claude Code — notifications start automatically. That's it. `zeph inst
 | Claude **finishes real work** (a completion summary) | ≥2 tool calls, not just reads |
 | Claude **asks you a question** | any `AskUserQuestion` |
 
-These ride on hooks — shell commands that fire on Claude events, independent of whether the model "remembers" to notify you. Read-only turns stay quiet. Dial the volume any time (see [Mute & Push Mode](#mute--push-mode)).
+These ride on hooks — shell commands that fire on Claude events, independent of whether the model "remembers" to notify you. Read-only turns stay quiet. They fire in **every** Claude Code session, not only ones launched with `zeph cc` — that command is the phone-control bridge, not the notification switch. Dial the volume any time, per project or machine-wide (see [Mute & Push Mode](#mute--push-mode)).
 
 ### 2. Reply from your phone, straight into the session
 
@@ -99,19 +99,21 @@ Duration takes `2h`, `90m`, `1h30m`, or plain minutes (default `1h`). `/zeph-sta
 
 ## Mute & Push Mode
 
-Too many pushes? Silence or dial the volume, per project:
+Pushes fire for **every** Claude Code session, not only ones launched with `zeph cc` — `zeph cc` is the remote-control bridge, not the notification switch. Too many pushes? Silence or dial the volume, per project:
 
 ```
 /zeph-mute      Disable all notifications for this project
 /zeph-unmute    Re-enable them
-/zeph-status    Show current state (mute + push mode)
+/zeph-status    Show current state (mute + push mode, and where it came from)
 
 /zeph-quiet     Only high-priority pushes reach you
 /zeph-loud      Push on every turn
 /zeph-normal    Restore the default (push on real work, quiet on reads)
 ```
 
-State lives in a file under `${XDG_STATE_HOME:-~/.local/state}/zeph`, keyed by project directory — it survives reboots and new sessions until you undo it. Mute silences both hooks and CLI calls and overrides any push mode.
+Add `--global` to any of the three dials to set the **machine-wide default** for every project that has no dial of its own — `/zeph-quiet --global` is the "keep it down everywhere, still ping me on blockers" setting. A per-project dial always outranks it, so `/zeph-normal` opts a single project back into full pushes and `/zeph-normal --global` clears the default everywhere.
+
+State lives in a file under `${XDG_STATE_HOME:-~/.local/state}/zeph`, keyed by project directory (`pushmode-default` for the global one) — it survives reboots and new sessions until you undo it. Mute silences both hooks and CLI calls and overrides any push mode; mute stays per-project by design, since a global mute could never be lifted for a single project.
 
 ---
 

@@ -6,7 +6,7 @@ description: >
   tasks, encountering errors, or needing user decisions while away from terminal.
 metadata:
   author: zeph-to
-  version: "0.8.0"
+  version: "0.9.0"
   relatedSkills:
     - zeph-config
     - zeph-mute

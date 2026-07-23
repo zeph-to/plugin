@@ -66,11 +66,20 @@ ZEPH_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/zeph"
 
 # zeph_state_present <kind> <hash> — kind is muted|pushmode|auto. Echoes the
 # live state-file path, rc 1 if none.
+#
+# `pushmode` alone has a machine-wide default (`pushmode-default`, written by
+# `/zeph-quiet --global`), consulted last so a per-project dial always wins.
+# `cksum` emits digits only, so `-default` can never collide with a real hash.
+# Mute is deliberately project-only: a global mute file would have no way to be
+# lifted for one project (presence, not content, is the signal), and a global
+# `quiet` already covers "stop the routine pushes everywhere".
 zeph_state_present() {
     if [ -f "$ZEPH_STATE_DIR/$1-$2" ]; then
         echo "$ZEPH_STATE_DIR/$1-$2"
     elif [ -f "/tmp/zeph-$1-$2" ] && [ -O "/tmp/zeph-$1-$2" ]; then
         echo "/tmp/zeph-$1-$2"
+    elif [ "$1" = pushmode ] && [ -f "$ZEPH_STATE_DIR/pushmode-default" ]; then
+        echo "$ZEPH_STATE_DIR/pushmode-default"
     else
         return 1
     fi
