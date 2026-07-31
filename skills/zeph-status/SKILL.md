@@ -7,7 +7,7 @@ description: >
   push mode to see current state.
 metadata:
   author: zeph-to
-  version: "0.9.0"
+  version: "0.10.0"
   relatedSkills:
     - zeph
     - zeph-mute
@@ -38,15 +38,23 @@ if [ -f "$STATE_DIR/muted-$HASH" ] || { [ -f "/tmp/zeph-muted-$HASH" ] && [ -O "
 else
   echo "ACTIVE"
 fi
-MODE=""; SCOPE=""
+MODE_FILE=""; SCOPE=""
 if [ -f "$STATE_DIR/pushmode-$HASH" ]; then
-  MODE=$(cat "$STATE_DIR/pushmode-$HASH"); SCOPE="this project"
+  MODE_FILE="$STATE_DIR/pushmode-$HASH"; SCOPE="this project"
 elif [ -f "/tmp/zeph-pushmode-$HASH" ] && [ -O "/tmp/zeph-pushmode-$HASH" ]; then
-  MODE=$(cat "/tmp/zeph-pushmode-$HASH"); SCOPE="this project"
+  MODE_FILE="/tmp/zeph-pushmode-$HASH"; SCOPE="this project"
 elif [ -f "$STATE_DIR/pushmode-default" ]; then
-  MODE=$(cat "$STATE_DIR/pushmode-default"); SCOPE="global default"
+  MODE_FILE="$STATE_DIR/pushmode-default"; SCOPE="global default"
 fi
-echo "PUSH MODE: ${MODE:-normal}${SCOPE:+ ($SCOPE)}"
+# No dial anywhere → quiet, the shipped default. A dial file that exists but
+# reads empty is a corrupted setting, and the hook resolves it to normal —
+# mirror that here or the status line contradicts what actually happens.
+if [ -n "$MODE_FILE" ]; then
+  MODE=$(tr -d '[:space:]' < "$MODE_FILE"); MODE="${MODE:-normal}"
+else
+  MODE="quiet"; SCOPE="built-in default — no dial set"
+fi
+echo "PUSH MODE: $MODE ($SCOPE)"
 if [ -f "$STATE_DIR/auto-$HASH" ]; then
   read -r DEADLINE MINUTES < "$STATE_DIR/auto-$HASH"
   echo "AUTO MODE: $(( (DEADLINE - $(date +%s)) / 60 ))m remaining of ${MINUTES}m"
@@ -56,13 +64,19 @@ fi
 Report the result in your own words:
 - `MUTED` → notifications are muted for this project; `/zeph-unmute` re-enables them.
 - `ACTIVE` → notifications are active; `/zeph-mute` silences them.
-- `PUSH MODE: normal` → default (push on real work, silent on read-only).
-- `PUSH MODE: quiet` → only high-priority pushes; `/zeph-normal` restores default.
-- `PUSH MODE: loud` → every turn pushes; `/zeph-normal` restores default.
+- `PUSH MODE: quiet` → only high-priority pushes reach them. This is the
+  shipped default, so it is what a project with no dial reports.
+- `PUSH MODE: normal` → the per-turn heuristic decides (push on real work,
+  silent on read-only). Set with `/zeph-normal`.
+- `PUSH MODE: loud` → every turn pushes; `/zeph-normal` turns it down.
 - The parenthetical says where the mode came from: `this project` (a dial set
-  here) or `global default` (set with `--global`, inherited by every project
-  that has none of its own). `/zeph-normal` overrides it here; `/zeph-normal
-  --global` clears it everywhere.
+  here), `global default` (set with `--global`, inherited by every project that
+  has none of its own), or `built-in default — no dial set`. `/zeph-normal`
+  overrides the first two here; `/zeph-normal --global` clears the global one
+  everywhere, which leaves projects back on the built-in quiet.
+- Quiet does not mean nothing arrives: questions still push (the model's
+  `zeph_ask` and the AskUserQuestion mirror are outside the dial), and a
+  session that goes idle for five minutes still sends its completion push.
 - `AUTO MODE: ...` → a `/zeph-auto` session is running with that much budget left.
 
 (Push mode only applies when not muted — mute overrides everything.)

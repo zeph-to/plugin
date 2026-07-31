@@ -20,9 +20,10 @@ Zeph lets the user drive this session from their phone. You are talking to a use
 
 **Why this matters:** The user gets a notification for every meaningful response. Manual notifications at the end create duplicates and spam.
 
-1. A Stop hook already sends an automatic push on every response that did real work (≥2 tool calls). Do NOT call `zeph_notify` just to say "done" — it duplicates the auto-push.
+1. A Stop hook owns the end-of-turn push. Do NOT call `zeph_notify` just to say "done" — either it duplicates the auto-push, or the user deliberately turned that push off and you are working around their setting.
    - ❌ Wrong: `zeph_notify(title: "Done")` at end of response
-   - ✅ Correct: Let the Stop hook fire automatically (one push)
+   - ✅ Correct: Let the Stop hook decide (see the push-mode dial below)
+   - How much it sends depends on the user's dial. A stock install is **quiet**: routine per-turn pushes stay silent, and only a `high` Push Signal gets through. `/zeph-normal` restores a push on every response that did real work (≥2 tool calls), `/zeph-loud` pushes on every turn.
 
 2. Use `zeph_notify` only for: mid-task errors that block progress, explicit long-running progress milestones, or multi-session signals ("session A finished, session B still building"). Set `priority: "high"` for blockers.
    - ✅ Example 1: Mid-task blocker → `zeph_notify(title: "Build failed", priority: "high")`
@@ -44,7 +45,11 @@ the default.
 - `<!-- zeph: push -->` — force a push the heuristic would otherwise skip. Use for a small but important action (a single force-push, a one-line deploy trigger).
 - `<!-- zeph: high -->` — force a push AND mark it high priority. Use for an important completion the user should see prominently.
 
-No marker → the default applies: a turn that ran <2 tools, or whose tools are all read-only (Read/Grep/Glob), stays silent; otherwise it pushes. The marker is lowercase and exact. It only tunes the Stop-hook push and is **ignored on any turn that already sent `zeph_ask`** (that turn already notified) — so in REMOTE, where every response ends with `zeph_ask`, the Push Signal has no effect; it is a NORMAL-mode tool.
+No marker → the heuristic applies: a turn that ran <2 tools, or whose tools are all read-only (Read/Grep/Glob), stays silent; otherwise it pushes. The marker is lowercase and exact.
+
+**The user's push-mode dial sits above all of this, and a stock install has no dial — which means quiet.** In quiet the heuristic never fires and `skip`/`push` change nothing; only `<!-- zeph: high -->` reaches the user. So on a default install, `high` is not "escalation" — it is the whole channel, and a completion the user is genuinely waiting on is what it is for. Do not reach for it on every turn: a `high` on routine work is exactly the noise the quiet default exists to remove. The heuristic and the other two markers come back the moment the user runs `/zeph-normal`.
+
+The marker only tunes the Stop-hook push and is **ignored on any turn that already sent `zeph_ask`** (that turn already notified) — so in REMOTE, where every response ends with `zeph_ask`, the Push Signal has no effect; it is a NORMAL-mode tool.
 
 ### Common Mistakes to Avoid
 
@@ -191,7 +196,7 @@ The moment the user picks an action id matching `done`/`stop`/`exit` (case-insen
 
 ### Mute
 
-12. If the user ran `/zeph-mute` for this project, the Stop and Ask hooks stay silent (driven by a per-project marker file that persists until `/zeph-unmute`). MCP tools still work but don't call them unless the user explicitly asks. `/zeph-unmute` lifts it. The user can also dial the auto-push volume without full silence: `/zeph-quiet` (only high-priority pushes), `/zeph-loud` (push every turn), `/zeph-normal` (default). This is a project-level override above your per-turn Push Signal; each dial also takes `--global` to set the machine-wide default for projects with no dial of their own (per-project always wins). `/zeph-status` shows the current mode and which scope it came from. Mute overrides all of them.
+12. If the user ran `/zeph-mute` for this project, the Stop and Ask hooks stay silent (driven by a per-project marker file that persists until `/zeph-unmute`). MCP tools still work but don't call them unless the user explicitly asks. `/zeph-unmute` lifts it. The user can also dial the auto-push volume without full silence: `/zeph-quiet` (only high-priority pushes — this is what an install with no dial already does), `/zeph-loud` (push every turn), `/zeph-normal` (push on every turn that did real work). This is a project-level override above your per-turn Push Signal; each dial also takes `--global` to set the machine-wide default for projects with no dial of their own (per-project always wins). `/zeph-status` shows the current mode and which scope it came from. Mute overrides all of them.
 
 ### Persistence
 
@@ -207,7 +212,7 @@ The moment the user picks an action id matching `done`/`stop`/`exit` (case-insen
 
 2. Use `zeph_notify` only for: mid-task errors that block progress, explicit long-running progress milestones, or multi-session signals. Set `priority: "high"` for blockers. **Be proactive** — fire a blocker/error push the instant it happens, mid-task, not batched to the end of the response.
 
-2b. **Push Signal** — steer the Stop hook's auto-push by emitting ONE marker in your response (HTML comment; the hook strips it from the body): `<!-- zeph: skip -->` suppress, `<!-- zeph: push -->` force a push the heuristic would skip, `<!-- zeph: high -->` force a high-priority push. No marker → default (silent if <2 tools or all read-only, else push). Lowercase, exact.
+2b. **Push Signal** — steer the Stop hook's auto-push by emitting ONE marker in your response (HTML comment; the hook strips it from the body): `<!-- zeph: skip -->` suppress, `<!-- zeph: push -->` force a push the heuristic would skip, `<!-- zeph: high -->` force a high-priority push. Lowercase, exact. **An install with no push-mode dial is quiet**, and quiet lets only `high` through — so on a stock install `high` is the one marker that changes anything, and it is how a genuinely important completion still reaches the user. `skip`/`push` and the no-marker heuristic (silent if <2 tools or all read-only, else push) take effect once the user runs `/zeph-normal`.
 
 3. To enable remote control (buttons + free-text from the phone), the user should set `ZEPH_HOOK_ID` via `npx @zeph-to/cli setup`. You may mention this once if relevant — don't repeat it.
 
@@ -227,7 +232,7 @@ The moment the user picks an action id matching `done`/`stop`/`exit` (case-insen
 |------|------|--------|
 | **1-2: Notify** | End of response with real work | Skip `zeph_notify` (auto-push) |
 | **1-2: Notify** | Mid-task error or long-running checkpoint | Call `zeph_notify` with `priority: "high"` — the instant it happens, not batched |
-| **Push Signal** | Steer the Stop-hook auto-push (NORMAL mode) | Emit `<!-- zeph: skip\|push\|high -->`; none = default heuristic |
+| **Push Signal** | Steer the Stop-hook auto-push (NORMAL mode) | Emit `<!-- zeph: skip\|push\|high -->`; on a stock (quiet) install only `high` gets through |
 | **3: Questions** | Your response asks anything | FINAL tool call = `zeph_ask` |
 | **4: After work** | Substantial changes (files, builds, deploys) | Default = end with `zeph_ask` |
 | **4: Trivial** | Read-only, mid-plan, typo fixes | Skip `zeph_ask`, let Stop hook fire |

@@ -45,10 +45,12 @@ Restart Claude Code — notifications start automatically. That's it. `zeph inst
 
 | You get a push when… | Fires on |
 |----------------------|----------|
-| Claude **finishes real work** (a completion summary) | ≥2 tool calls, not just reads |
 | Claude **asks you a question** | any `AskUserQuestion` |
+| A session **has been idle for five minutes** (it's done) | the session going quiet, not each turn |
+| Claude flags a turn as **important** | a `high` Push Signal on that response |
+| Claude **finishes real work**, every turn | only after `/zeph-normal` — see below |
 
-These ride on hooks — shell commands that fire on Claude events, independent of whether the model "remembers" to notify you. Read-only turns stay quiet. They fire in **every** Claude Code session, not only ones launched with `zeph cc` — that command is the phone-control bridge, not the notification switch. Dial the volume any time, per project or machine-wide (see [Mute & Push Mode](#mute--push-mode)).
+These ride on hooks — shell commands that fire on Claude events, independent of whether the model "remembers" to notify you. Out of the box the per-turn push is off (`quiet`), so a long session pings you when it asks something and when it's actually finished, not thirty times along the way. They fire in **every** Claude Code session, not only ones launched with `zeph cc` — that command is the phone-control bridge, not the notification switch. Dial the volume any time, per project or machine-wide (see [Mute & Push Mode](#mute--push-mode)).
 
 ### 2. Reply from your phone, straight into the session
 
@@ -99,19 +101,21 @@ Duration takes `2h`, `90m`, `1h30m`, or plain minutes (default `1h`). `/zeph-sta
 
 ## Mute & Push Mode
 
-Pushes fire for **every** Claude Code session, not only ones launched with `zeph cc` — `zeph cc` is the remote-control bridge, not the notification switch. Too many pushes? Silence or dial the volume, per project:
+Pushes fire for **every** Claude Code session, not only ones launched with `zeph cc` — `zeph cc` is the remote-control bridge, not the notification switch. Silence or dial the volume, per project:
 
 ```
 /zeph-mute      Disable all notifications for this project
 /zeph-unmute    Re-enable them
 /zeph-status    Show current state (mute + push mode, and where it came from)
 
-/zeph-quiet     Only high-priority pushes reach you
+/zeph-quiet     Only high-priority pushes reach you  ← the default
 /zeph-loud      Push on every turn
-/zeph-normal    Restore the default (push on real work, quiet on reads)
+/zeph-normal    Push on every turn that did real work, quiet on reads
 ```
 
-Add `--global` to any of the three dials to set the **machine-wide default** for every project that has no dial of its own — `/zeph-quiet --global` is the "keep it down everywhere, still ping me on blockers" setting. A per-project dial always outranks it, so `/zeph-normal` opts a single project back into full pushes and `/zeph-normal --global` clears the default everywhere.
+**Quiet is the default.** An install with no dial pushes only on high-priority signals, so a long session doesn't turn into a stream of per-turn notifications. What still reaches you: questions (the agent asking you something is never suppressed) and the completion push when a session has been idle for five minutes. If you'd rather hear about every working turn, `/zeph-normal` — that was the old default.
+
+Add `--global` to any of the three dials to set the **machine-wide default** for every project that has no dial of its own. A per-project dial always outranks it, so `/zeph-normal` opts a single project back into per-turn pushes and `/zeph-normal --global` does it everywhere.
 
 State lives in a file under `${XDG_STATE_HOME:-~/.local/state}/zeph`, keyed by project directory (`pushmode-default` for the global one) — it survives reboots and new sessions until you undo it. Mute silences both hooks and CLI calls and overrides any push mode; mute stays per-project by design, since a global mute could never be lifted for a single project.
 

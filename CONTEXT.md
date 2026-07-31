@@ -36,12 +36,16 @@ plugin behaves exactly as before unless the model speaks up.
 
 ### Push Mode
 A **user**-set session preference that dials the Stop-hook Push volume, sitting one
-level above the model's per-turn Push Signal. Three modes — **normal** (the default
+level above the model's per-turn Push Signal. Three modes — **normal** (the volume
 heuristic decides), **quiet** (only high-priority pushes survive), **loud** (every
 turn pushes) — set via `/zeph-quiet` / `/zeph-loud` / `/zeph-normal`, mirroring the
 mute mechanism. Each dial also takes `--global`, writing the hash-less
 `pushmode-default` that every project without its own dial falls back to; a
-project dial always outranks it. Distinct from **Mute**, which is total silence,
+project dial always outranks it. **With no dial anywhere the mode is `quiet`** —
+the shipped default, so `normal` is now something a user opts into rather than
+returns to. A dial file that exists but reads empty is treated as `normal`
+instead: "no dial" and "broken dial" are different, and resolving breakage to
+silence would leave no symptom to debug. Distinct from **Mute**, which is total silence,
 overrides any Push Mode, and has no `--global` form (presence-keyed, so it could
 never be lifted for one project). Where they conflict, the user's Push Mode wins over the model's Push
 Signal (an explicit session preference outranks a per-turn hint).
