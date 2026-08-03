@@ -23,20 +23,27 @@ command -v jq >/dev/null || { echo "jq required" >&2; exit 1; }
 PASS=0; FAIL=0; TOTAL=0
 FAILED_TESTS=()
 
+# Single definition of the pass/fail bookkeeping — the vector loop and the
+# resolver cases below both report through it, so the two halves of this file
+# can never print in different formats.
+record() {
+    local desc="$1" expected="$2" actual="$3"
+    TOTAL=$((TOTAL + 1))
+    if [ "$actual" = "$expected" ]; then
+        echo "  ✓ $desc"
+        PASS=$((PASS + 1))
+    else
+        echo "  ✗ $desc (expected '$expected', got '$actual')"
+        FAIL=$((FAIL + 1))
+        FAILED_TESTS+=("$desc")
+    fi
+}
+
 # One compact line per vector: name<TAB>tool<TAB>nonreadonly<TAB>asked<TAB>marker<TAB>mode<TAB>expected
 # alreadyAsked is a boolean in the JSON contract; the bash function takes the
 # per-turn count, so true → 1, false → 0.
 while IFS=$'\t' read -r name tool nonreadonly asked marker mode expected; do
-    TOTAL=$((TOTAL + 1))
-    actual=$(zeph_gate_decide "$tool" "$nonreadonly" "$asked" "$marker" "$mode")
-    if [ "$actual" = "$expected" ]; then
-        echo "  ✓ $name"
-        PASS=$((PASS + 1))
-    else
-        echo "  ✗ $name (expected '$expected', got '$actual')"
-        FAIL=$((FAIL + 1))
-        FAILED_TESTS+=("$name")
-    fi
+    record "$name" "$expected" "$(zeph_gate_decide "$tool" "$nonreadonly" "$asked" "$marker" "$mode")"
 done < <(jq -r '.[] |
     [ .name,
       (.input.toolCount | tostring),
@@ -46,6 +53,54 @@ done < <(jq -r '.[] |
       .input.pushMode,
       (if .expect.push then "push \(.expect.priority)" else "silent" end)
     ] | @tsv' "$VECTORS")
+
+# ── zeph_gate_decide stays symmetric with its TS twin ───────────────────────
+#
+# The pure function must answer every input the way decidePush does, including
+# the ones the vector file never sends. A mode it does not recognise — absent,
+# empty, or garbage — is `normal` on both sides, so a vector could be written
+# for any of these and both CIs would still agree. The shipped default is NOT
+# decided here; it lives one layer down, in zeph_read_pushmode.
+echo
+echo "[zeph_gate_decide — inputs outside the vector file]"
+record "a missing mode argument is normal, like decidePush's fallthrough" \
+    "push normal" "$(zeph_gate_decide 2 1 0 none)"
+record "an empty mode argument is normal" \
+    "push normal" "$(zeph_gate_decide 2 1 0 none "")"
+record "an unrecognised mode is normal (and its floors still apply)" \
+    silent "$(zeph_gate_decide 1 1 0 none banana)"
+
+# ── zeph_read_pushmode — where the shipped default actually lives ───────────
+#
+# The bash twin of cli/src/gate.ts readPushMode, and the reason the vectors
+# cannot reach the default: neither side's PURE function decides it. Both
+# resolvers answer the same four shapes the same way, and this block is the
+# mirror of gate.test.ts's "the default: no dial file" cases.
+echo
+echo "[zeph_read_pushmode — dial resolution]"
+STATE_TMP=$(mktemp -d)
+XDG_STATE_HOME="$STATE_TMP" ZEPH_STATE_DIR="$STATE_TMP/zeph"
+mkdir -p "$ZEPH_STATE_DIR"
+DIAL="$ZEPH_STATE_DIR/pushmode-testhash"
+
+record "no dial file anywhere is the shipped quiet default" \
+    quiet "$(zeph_read_pushmode testhash)"
+record "an unhashable project is normal, not the default" \
+    normal "$(zeph_read_pushmode "")"
+
+printf 'loud\n' > "$DIAL"
+record "a readable dial wins over the default" loud "$(zeph_read_pushmode testhash)"
+printf ' quiet ' > "$DIAL"
+record "surrounding whitespace is stripped" quiet "$(zeph_read_pushmode testhash)"
+printf '' > "$DIAL"
+record "an empty dial file is normal, not the default" normal "$(zeph_read_pushmode testhash)"
+printf '  \n' > "$DIAL"
+record "a whitespace-only dial file is normal too" normal "$(zeph_read_pushmode testhash)"
+printf 'banana' > "$DIAL"
+record "an unrecognised dial value is normal — a garbled dial stays debuggable" \
+    normal "$(zeph_read_pushmode testhash)"
+
+rm -rf "$STATE_TMP"
 
 echo
 echo "=========================================="

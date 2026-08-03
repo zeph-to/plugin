@@ -60,7 +60,7 @@ run_hook() {
     rm -f "$WORK/last-call"
     printf '%s' "$input" \
       | CLAUDE_PROJECT_DIR="$project_dir" PATH="$STUB_DIR:$PATH" \
-        XDG_STATE_HOME="$WORK/state" \
+        XDG_STATE_HOME="$WORK/state" XDG_CACHE_HOME="$WORK/cache" \
         bash "$HOOK_SCRIPT" 2>/dev/null
 }
 
@@ -74,6 +74,20 @@ zeph_body_bytes_le() {
     body=$(awk '/^--body$/{getline; print; exit}' "$WORK/last-call")
     bytes=$(printf '%s' "$body" | wc -c | tr -d ' ')
     [ "$bytes" -le "$1" ]
+}
+# argv is one flag/value per line, so the session id is the line after --session.
+zeph_session_is() {
+    [ -f "$WORK/last-call" ] || return 1
+    local got
+    got=$(awk '/^--session$/{getline; print; exit}' "$WORK/last-call")
+    [ "$got" = "$1" ]
+}
+zeph_no_session()   { [ -f "$WORK/last-call" ] && ! grep -qx -- '--session' "$WORK/last-call"; }
+zeph_priority_is() {
+    [ -f "$WORK/last-call" ] || return 1
+    local got
+    got=$(awk '/^--priority$/{getline; print; exit}' "$WORK/last-call")
+    [ "$got" = "$1" ]
 }
 
 # ── tests ──────────────────────────────────────────────────────────────────
@@ -136,6 +150,40 @@ run_hook 'not-json-at-all{'
 # but if the input isn't valid JSON, jq returns empty/fails; the hook then
 # still calls zeph notify with the fallback "Question pending".
 assert "doesn't crash; pushes fallback" zeph_called
+
+echo
+echo "[priority — the suppressed blocked twin was high, so this must be too]"
+run_hook '{"tool_input":{"question":"ready?"}}'
+assert "sends --priority high"           zeph_priority_is "high"
+
+echo
+echo "[session id — transcript_path carries the Claude session UUID]"
+# The server correlates this push with the listener's `blocked` agent.state push
+# by session id; without it the same question notifies twice.
+UUID="8f14e45f-ceea-467a-9f43-2b8c1e4f9a01"
+run_hook "$(printf '{"transcript_path":"/Users/x/.claude/projects/p/%s.jsonl","tool_input":{"question":"ready?"}}' "$UUID")"
+assert "passes --session with the UUID"  zeph_session_is "$UUID"
+
+echo
+echo "[session id — absent transcript_path stays unflagged]"
+run_hook '{"tool_input":{"question":"ready?"}}'
+assert "fires without --session"         zeph_no_session
+
+echo
+echo "[session id — falls back to the MCP session cache]"
+CACHE_PROJECT="$WORK/cached-project"
+mkdir -p "$CACHE_PROJECT" "$WORK/cache/zeph"
+CACHE_HASH=$(printf '%s' "$CACHE_PROJECT" | cksum | cut -d' ' -f1)
+printf 'sess_abc123\n' > "$WORK/cache/zeph/session-$CACHE_HASH"
+run_hook '{"tool_input":{"question":"ready?"}}' "$CACHE_PROJECT"
+assert "uses cached session id"          zeph_session_is "sess_abc123"
+
+echo
+echo "[session id — tampered cache can't inject argv]"
+printf 'sess_abc; rm -rf /\n' > "$WORK/cache/zeph/session-$CACHE_HASH"
+run_hook '{"tool_input":{"question":"ready?"}}' "$CACHE_PROJECT"
+assert "rejects non-token cache value"   zeph_no_session
+rm -f "$WORK/cache/zeph/session-$CACHE_HASH"
 
 echo
 echo "=========================================="

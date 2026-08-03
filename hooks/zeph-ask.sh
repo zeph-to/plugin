@@ -50,6 +50,30 @@ OPTIONS=$(printf '%s' "$OPTIONS" | trim_chars 120)
 
 PROJECT=$(basename "$CLAUDE_PROJECT_DIR" 2>/dev/null || echo "unknown")
 
+# Session id — the key the server uses to recognize that this question already
+# notified. Without it the listener's `blocked` agent.state push fires a second
+# notification for the same question seconds later. Extraction mirrors
+# zeph-stop.sh: UUID out of the transcript path, MCP session cache as the
+# fallback, and the same argv-injection guard on the cache value (it expands
+# unquoted below, and the legacy /tmp copy has a world-writable parent).
+TRANSCRIPT=$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty' 2>/dev/null)
+SESSION_ID=$(printf '%s' "$TRANSCRIPT" | grep -o '[0-9a-f]\{8\}-[0-9a-f]\{4\}-[0-9a-f]\{4\}-[0-9a-f]\{4\}-[0-9a-f]\{12\}' | tail -n1)
+if [ -z "$SESSION_ID" ]; then
+    ZEPH_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/zeph"
+    SESSION_ID=$(cat "$ZEPH_CACHE_DIR/session-${MUTE_HASH}" 2>/dev/null \
+              || cat "/tmp/zeph-session-${MUTE_HASH}" 2>/dev/null)
+    case "$SESSION_ID" in
+        *[!A-Za-z0-9_-]*) SESSION_ID="" ;;
+    esac
+fi
+SESSION_FLAG=""
+[ -n "$SESSION_ID" ] && SESSION_FLAG="--session $SESSION_ID"
+
+# High priority because this push now stands alone. The server suppresses its
+# `blocked` agent.state twin once this one is on file, and that twin was high —
+# sending this at the default `normal` would quietly demote every question the
+# user gets on their phone.
+
 # Build the body: question, the choices (when present), and an honest note that
 # this picker must be answered at the terminal — the title says "asks" but a
 # one-way notify can't round-trip an AskUserQuestion answer from the phone.
@@ -61,10 +85,11 @@ BODY="$BODY
 
 # Default: silent on failure. Opt-in ZEPH_HOOK_DEBUG=1 logs stderr +
 # failures (the silent `2>/dev/null` otherwise hides every hook error).
+# shellcheck disable=SC2086
 if [ -n "$ZEPH_HOOK_DEBUG" ]; then
     ZEPH_LOG="${ZEPH_HOOK_LOG:-/tmp/zeph-hook.log}"
-    $ZEPH_CMD notify --title "Claude asks: $PROJECT" --body "$BODY" \
+    $ZEPH_CMD notify --title "Claude asks: $PROJECT" --body "$BODY" --priority high $SESSION_FLAG \
         >>"$ZEPH_LOG" 2>&1 || echo "[zeph-ask] notify failed at $(date '+%Y-%m-%d %H:%M:%S')" >>"$ZEPH_LOG"
 else
-    $ZEPH_CMD notify --title "Claude asks: $PROJECT" --body "$BODY" 2>/dev/null || true
+    $ZEPH_CMD notify --title "Claude asks: $PROJECT" --body "$BODY" --priority high $SESSION_FLAG 2>/dev/null || true
 fi

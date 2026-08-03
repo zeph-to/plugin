@@ -15,8 +15,13 @@
 #   nonreadonly_count — tools that are NOT read-only (Read/Grep/Glob)
 #   already_asked     — count of zeph_ask/zeph_prompt this turn (>0 = notified)
 #   marker            — skip | push | high | anything else = none
-#   pushmode          — quiet | loud | anything else = normal
+#   pushmode          — quiet | loud | anything else (incl. missing) = normal
 # Prints exactly one of: "push high" | "push normal" | "silent".
+#
+# This function decides NOTHING about what an install with no dial gets — that
+# is zeph_read_pushmode's job, below. Keeping it out of here is what lets the
+# vector file stay a complete contract: every input this function accepts, the
+# TS twin's decidePush answers identically, so any case can become a vector.
 #
 # Ordering is contractual (encoded as named vectors):
 #   1. already_asked wins over EVERYTHING — even loud (dedup beats the dial).
@@ -83,6 +88,36 @@ zeph_state_present() {
     else
         return 1
     fi
+}
+
+# Push mode for an install that has never set a dial. The TS twin is
+# cli/src/gate.ts PUSHMODE_DEFAULT — the vector file cannot lock this, because
+# neither side's pure decision function is where it lives, so both sides pin it
+# in their own tests.
+ZEPH_PUSHMODE_DEFAULT=quiet
+
+# zeph_read_pushmode <hash> — the effective dial for a project. The bash twin of
+# cli/src/gate.ts readPushMode; keep them behaviorally in sync.
+#
+# Three failure shapes, and only one of them gets the quiet default:
+#   - no hash (cksum unavailable, so no state file can be keyed) → normal
+#   - no dial file anywhere                                      → the default
+#   - a dial that is empty, unreadable, or not one of the three
+#     recognised words                                           → normal
+# The two `normal` rows are the same judgment: a broken setting is not an
+# expression of intent, and resolving breakage to silence leaves the user with
+# the one symptom they cannot tell apart from working correctly. The TS twin
+# reaches the same answers — `if (!hash) return 'normal'` and
+# `normalizePushMode`, which maps both '' and garbage to normal.
+zeph_read_pushmode() {
+    local hash="$1" file mode
+    [ -n "$hash" ] || { echo normal; return 0; }
+    file=$(zeph_state_present pushmode "$hash") || { echo "$ZEPH_PUSHMODE_DEFAULT"; return 0; }
+    mode=$(tr -d '[:space:]' < "$file" 2>/dev/null)
+    case "$mode" in
+        quiet|loud|normal) echo "$mode" ;;
+        *)                 echo normal ;;
+    esac
 }
 
 # zeph_wrap_timeout <cmd> — bound a CLI invocation below the 10s hooks.json

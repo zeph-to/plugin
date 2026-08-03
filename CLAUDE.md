@@ -58,7 +58,10 @@ Users can also dial the auto-push volume without full silence (a session overrid
 above your per-turn Push Signal; mute still overrides it):
 - `/zeph-quiet` — only high-priority pushes reach them
 - `/zeph-loud` — push on every turn
-- `/zeph-normal` — restore the default heuristic
+- `/zeph-normal` — push on every turn that did real work (the heuristic)
+
+**An install with no dial is quiet.** That is the shipped default, so assume it
+unless `/zeph-status` says otherwise.
 
 Each dial also takes `--global`, which sets the machine-wide default for every
 project that has no dial of its own; a per-project dial always wins over it.
@@ -72,9 +75,9 @@ project that has no dial of its own; a per-project dial always wins over it.
 
 ## Automatic Behavior
 
-The Stop hook auto-pushes a completion notification after every response that did meaningful work (≥2 tool calls). You do not need to call `zeph_notify` for completion.
+The Stop hook owns the end-of-turn push, so you do not need to call `zeph_notify` for completion. How much it actually sends is the user's dial: an install with no dial is **quiet** (routine per-turn pushes suppressed), `/zeph-normal` pushes after every response that did meaningful work (≥2 tool calls), `/zeph-loud` pushes every turn.
 
-**Push Signal — steer that auto-push (NORMAL mode).** Emit ONE HTML-comment marker in your response to override the default: `<!-- zeph: skip -->` suppress, `<!-- zeph: push -->` force a push the heuristic would skip (small but important action), `<!-- zeph: high -->` force a high-priority push. No marker → default (silent if <2 tools or all read-only Read/Grep/Glob, else push). The hook strips the marker from the body; it is ignored on any turn that already sent `zeph_ask` (so it has no effect in REMOTE). See CORE_RULES.md → "Push Signal".
+**Push Signal — steer that auto-push (NORMAL mode).** Emit ONE HTML-comment marker in your response to override the default: `<!-- zeph: skip -->` suppress, `<!-- zeph: push -->` force a push the heuristic would skip (small but important action), `<!-- zeph: high -->` force a high-priority push. No marker → the heuristic (silent if <2 tools or all read-only Read/Grep/Glob, else push). On a stock quiet install the heuristic never runs and only `high` gets through — which makes `high` the way an important completion still reaches the user, and makes a `high` on routine work the exact noise quiet exists to remove. The hook strips the marker from the body; it is ignored on any turn that already sent `zeph_ask` (so it has no effect in REMOTE). See CORE_RULES.md → "Push Signal".
 
 **Be proactive with `zeph_notify`.** Fire a blocker/error push (`priority: "high"`) the instant it happens mid-task — before continuing — not batched to the end. On a long turn the user gets nothing until it ends.
 

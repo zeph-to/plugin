@@ -3,11 +3,12 @@ name: zeph-loud
 description: >
   Set Zeph to LOUD push mode — push on every turn, overriding the usual silence
   on read-only / sub-threshold turns and `skip` Push Signals. Applies to this
-  project, or to every project with `--global`. Use /zeph-normal to restore
-  default, /zeph-quiet for important-only, /zeph-mute for silence.
+  project, or to every project with `--global`. Use /zeph-normal for a push per
+  working turn, /zeph-quiet for important-only (the shipped default),
+  /zeph-mute for silence.
 metadata:
   author: zeph-to
-  version: "0.9.0"
+  version: "0.10.0"
   relatedSkills:
     - zeph
     - zeph-quiet
@@ -47,8 +48,9 @@ printf 'loud' > "$STATE_DIR/pushmode-default"
 Then confirm to the user, in your own words (say which scope it applied to):
 every turn now sends a push —
 overriding the read-only / `<2`-tool floor and any `skip` Push Signal. A turn that
-already sent a `zeph_ask` still won't double-push. `/zeph-normal` restores the
-default, `/zeph-quiet` limits to important pushes, `/zeph-mute` silences all.
+already sent a `zeph_ask` still won't double-push. `/zeph-normal` drops back to
+a push per working turn, `/zeph-quiet` limits to important pushes (the shipped
+default), `/zeph-mute` silences all.
 
 ## If Things Go Wrong
 

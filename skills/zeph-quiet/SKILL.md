@@ -3,11 +3,13 @@ name: zeph-quiet
 description: >
   Set Zeph to QUIET push mode — only high-priority pushes (blockers and `high`
   Push Signals) reach you; routine completion pushes are suppressed. Applies to
-  this project, or to every project with `--global`. Use /zeph-normal to restore
-  default, /zeph-loud for everything, /zeph-mute for full silence.
+  this project, or to every project with `--global`. Quiet is already the shipped
+  default, so this is mainly for undoing /zeph-normal or /zeph-loud. Use
+  /zeph-normal for a push per working turn, /zeph-loud for every turn,
+  /zeph-mute for full silence.
 metadata:
   author: zeph-to
-  version: "0.9.0"
+  version: "0.10.0"
   relatedSkills:
     - zeph
     - zeph-loud
@@ -47,8 +49,12 @@ printf 'quiet' > "$STATE_DIR/pushmode-default"
 Then confirm to the user, in your own words: only high-priority pushes (blockers
 and `high` Push Signals) will arrive — routine completion pushes are suppressed.
 Say which scope it applied to (this project vs every project). `/zeph-normal`
-restores the default, `/zeph-loud` pushes every turn, `/zeph-mute` silences
-everything. A per-project dial always wins over the global default.
+turns per-turn pushes back on, `/zeph-loud` pushes every turn, `/zeph-mute`
+silences everything. A per-project dial always wins over the global default.
+
+> Quiet is what a fresh install already does, so running this changes nothing
+> unless a `/zeph-normal` or `/zeph-loud` dial is in effect — which is exactly
+> what makes it the way to undo one.
 
 > Scope: this dials the automatic Stop-hook push. Explicit `zeph_notify` calls the
 > agent makes for blockers still go through.

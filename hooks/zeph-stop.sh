@@ -10,15 +10,11 @@
 #   - the user set /zeph-quiet (and this turn has no `high` marker)
 # The user can also force a push every turn with /zeph-loud.
 
-ZEPH_CMD="$(command -v zeph 2>/dev/null || echo "npx -y @zeph-to/cli")"
-
 command -v jq >/dev/null 2>&1 || exit 0
 
 # Shared hook library: the pure gate decision (parity-locked to the CLI via
 # tests/fixtures/gate-vectors.json) plus state-file + CLI-bounding helpers.
 . "$(dirname "${BASH_SOURCE[0]}")/gate.sh"
-
-ZEPH_CMD=$(zeph_wrap_timeout "$ZEPH_CMD")
 
 MUTE_HASH=$(printf '%s' "${CLAUDE_PROJECT_DIR:-$(pwd)}" | cksum | cut -d' ' -f1)
 
@@ -27,10 +23,12 @@ zeph_state_present muted "$MUTE_HASH" >/dev/null && exit 0
 # User push-mode dial (a level above the model's per-turn Push Signal marker):
 #   quiet — suppress every auto-push except a `high` marker
 #   loud  — push every turn, overriding skip / <2-tool / read-only
-# Absent or unrecognised → normal (the marker + heuristic gate decides). Set via
-# the /zeph-quiet|/zeph-loud|/zeph-normal skills, mirroring /zeph-mute.
-PUSHMODE=""
-PUSHMODE_FILE=$(zeph_state_present pushmode "$MUTE_HASH") && PUSHMODE=$(tr -d '[:space:]' < "$PUSHMODE_FILE" 2>/dev/null)
+#   normal — the marker + heuristic gate decides
+# No dial at all → quiet, the shipped default. Set via the
+# /zeph-quiet|/zeph-loud|/zeph-normal skills, mirroring /zeph-mute. Resolution
+# (including what a broken or unreadable dial means) lives in gate.sh alongside
+# its TS twin's — see zeph_read_pushmode.
+PUSHMODE=$(zeph_read_pushmode "$MUTE_HASH")
 
 INPUT=$(cat)
 TRANSCRIPT=$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty')
@@ -180,10 +178,17 @@ MARKER=""
 # via gate-vectors.json, with the CLI's TS twin. ALREADY_ASKED already
 # fast-exited above (before the marker wait, for latency); it is still passed
 # through so the sourced function honors the full contract on its own.
-VERDICT=$(zeph_gate_decide "$TOOL_COUNT" "$NONREADONLY_COUNT" "$ALREADY_ASKED" "${MARKER:-none}" "${PUSHMODE:-normal}")
+VERDICT=$(zeph_gate_decide "$TOOL_COUNT" "$NONREADONLY_COUNT" "$ALREADY_ASKED" "${MARKER:-none}" "$PUSHMODE")
 [ "$VERDICT" = silent ] && exit 0
 PRIORITY=""
 [ "$VERDICT" = "push high" ] && PRIORITY="high"
+
+# A push is committed, so resolve the CLI now — `command -v` twice over plus the
+# timeout probe. With quiet as the shipped default the silent path above is the
+# common one, and it needs none of this. Same reason PROJECT and BRANCH (with
+# their own git call) are resolved here rather than at the top of the file.
+ZEPH_CMD="$(command -v zeph 2>/dev/null || echo "npx -y @zeph-to/cli")"
+ZEPH_CMD=$(zeph_wrap_timeout "$ZEPH_CMD")
 
 PROJECT=$(basename "$CLAUDE_PROJECT_DIR" 2>/dev/null || echo "unknown")
 BRANCH=$(git -C "$CLAUDE_PROJECT_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "-")

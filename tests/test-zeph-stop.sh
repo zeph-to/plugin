@@ -102,6 +102,13 @@ zeph_body_bytes_gt() {
 
 # ── tests ──────────────────────────────────────────────────────────────────
 
+# The shipped default with no dial file is `quiet`, so every section that
+# exercises the normal-mode heuristic or the Push Signal markers pins the dial
+# explicitly — otherwise those cases would all read as "silent because quiet"
+# and stop testing what they name. The default itself gets its own section
+# below ("push mode: no dial").
+set_pushmode normal
+
 echo "[main 2-tool turn — happy path]"
 run_hook "$FIXTURES/main-2-tools.jsonl"
 assert "fires zeph notify"               zeph_called
@@ -280,7 +287,7 @@ assert     "quiet still lets a high marker through" zeph_called
 assert     "high push keeps --priority"            zeph_body_has "--priority"
 run_hook "$FIXTURES/main-marker-push.jsonl"
 assert "quiet suppresses a plain push marker" zeph_silent
-clear_pushmode
+set_pushmode normal
 
 echo
 echo "[push mode: loud — push every turn, override skip / <2 / B1]"
@@ -293,13 +300,50 @@ run_hook "$FIXTURES/main-marker-skip.jsonl"
 assert "loud overrides a skip marker"            zeph_called
 run_hook "$FIXTURES/main-with-zeph-ask.jsonl"
 assert "loud still respects dedup (ask already pushed)" zeph_silent
+set_pushmode normal
+
+echo
+echo "[push mode: no dial — quiet is the default]"
+# A fresh install has no dial file. The hook passes the (empty) dial contents
+# straight to zeph_gate_decide, whose 5th-argument default decides. This is the
+# behavior every existing install inherits on upgrade, so it is asserted
+# directly rather than left to the gate unit tests.
+clear_pushmode
+run_hook "$FIXTURES/main-2-tools.jsonl"
+assert "no dial suppresses a mixed-tool turn" zeph_silent
+run_hook "$FIXTURES/main-marker-push.jsonl"
+assert "no dial suppresses a plain push marker" zeph_silent
+run_hook "$FIXTURES/main-marker-high.jsonl"
+assert "no dial still lets a high marker through" zeph_called
+
+echo
+echo "[push mode: dial file present but empty — normal, not quiet]"
+# An empty dial file is a corrupted dial, not an absent one. Reading it as
+# quiet would turn a broken write into silence the user cannot explain, and it
+# would also split the two implementations: the TS twin's normalizePushMode('')
+# returns normal. The hook substitutes normal before the gate sees it.
+printf '' > "$(pushmode_file /tmp)"
+run_hook "$FIXTURES/main-2-tools.jsonl"
+assert "empty dial falls back to the normal heuristic" zeph_called
 clear_pushmode
 
 echo
-echo "[push mode: cleared — back to default heuristic]"
-clear_pushmode
+echo "[push mode: project hash unavailable — normal, not quiet]"
+# Without `cksum` the hook cannot key any state file, so it cannot find a dial
+# even if one exists. That is a broken environment, not a user who left the dial
+# alone, and the quiet default must not absorb it — the TS twin's readPushMode
+# returns `normal` for the same failure (`if (!hash) return 'normal'`), and
+# silence is the one symptom the user cannot tell apart from working correctly.
+cat > "$STUB_DIR/cksum" <<'CKSUM'
+#!/bin/bash
+exit 127
+CKSUM
+chmod +x "$STUB_DIR/cksum"
+run_hook "$FIXTURES/main-2-tools.jsonl"
+assert "an unhashable project falls back to the normal heuristic" zeph_called
 run_hook "$FIXTURES/main-readonly-only.jsonl"
-assert "no mode → B1 floor applies again" zeph_silent
+assert "and the normal heuristic still applies its floors" zeph_silent
+rm -f "$STUB_DIR/cksum"
 
 echo
 echo "[push mode: global default — /zeph-quiet --global]"
@@ -324,6 +368,7 @@ echo
 echo "[mute has no global default — project-only by design]"
 # Mute is presence-keyed, so a global mute file could never be lifted for a
 # single project. Only `pushmode` falls back to `-default`; lock that here.
+set_pushmode normal
 touch "$WORK/state/zeph/muted-default"
 run_hook "$FIXTURES/main-2-tools.jsonl"
 assert "muted-default does not silence an unmuted project" zeph_called
