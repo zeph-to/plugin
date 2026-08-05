@@ -36,7 +36,8 @@ Request free-form text input. Blocks until response or timeout.
 Copy text to the user's device clipboard.
 
 ### zeph_file
-Send a text file to the user's device.
+Send a file to the user's device — `filePath` for anything on disk (images, PDFs,
+logs), or `content` + `fileName` for generated text.
 
 ## Utility Tools
 

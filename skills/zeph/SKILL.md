@@ -98,11 +98,16 @@ Copy text to the user's device clipboard.
 - User needs to paste something elsewhere
 
 ### zeph_file
-Send a text file to the user's device.
+Send a file to the user's device. Pass `filePath` for a file that already exists
+on disk, or `content` + `fileName` for text you generated.
 
 **When to use:**
+- Send an image, screenshot, or PDF — `filePath`, and it renders inline on the device
 - Share logs, reports, or generated config files
 - Content too long for a notification body
+
+Never base64 a binary file into `content` — pass `filePath` and let the MCP
+server read the bytes.
 
 ## Utility Tools
 
