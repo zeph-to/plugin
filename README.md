@@ -5,6 +5,7 @@
 [![cli](https://img.shields.io/npm/v/@zeph-to/cli?label=%40zeph-to%2Fcli)](https://www.npmjs.com/package/@zeph-to/cli)
 [![mcp-server](https://img.shields.io/npm/v/@zeph-to/mcp-server?label=%40zeph-to%2Fmcp-server)](https://www.npmjs.com/package/@zeph-to/mcp-server)
 [![license](https://img.shields.io/github/license/zeph-to/plugin)](./LICENSE)
+[![docs](https://img.shields.io/badge/docs-docs.zeph.to-1f6feb)](https://docs.zeph.to)
 
 **Your agent finishes a build or hits a decision → your phone buzzes → you tap an answer → the session keeps going.** No walking back to the terminal.
 
@@ -16,6 +17,8 @@ Zeph turns any AI coding agent into something you can supervise from your pocket
 </p>
 
 Works with **Claude Code, Cursor, Windsurf, Gemini CLI, Codex, and more.** Built on [`@zeph-to/cli`](https://github.com/zeph-to/cli) (installer, hooks, tmux remote control) and [`@zeph-to/mcp-server`](https://github.com/zeph-to/mcp-server) (the `zeph_ask` family of tools), paired with the [Zeph app](https://zeph.to) on your phone.
+
+> **New here?** [docs.zeph.to](https://docs.zeph.to) walks the whole setup — one command on your machine, the app on your phone, and a restart. The reference below assumes that is already done.
 
 ---
 
