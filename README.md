@@ -258,7 +258,7 @@ With it on, push bodies and attachments are encrypted with AES-256-GCM. Each mac
 
 **Threat model, honestly.** Against a *passive* backend — a leaked snapshot, an operator reading the table — the stored ciphertext is useless, so push contents stay private. Three things it does not do:
 
-- **It does not stop an active operator.** Recipient public keys come from the same server, unsigned. A backend that injects a device record carrying its own key gets the message key wrapped for it. The Zeph app ships the counter-measure — compare device fingerprints, mark them verified, and strict mode then wraps only for verified devices — but it is off by default and the CLI and MCP server do not consult it.
+- **It does not stop an active operator.** Recipient public keys come from the same server, unsigned. A backend that injects a device record carrying its own key gets the message key wrapped for it. The Zeph app ships the counter-measure — compare device fingerprints, mark them verified, and strict mode then wraps only for verified devices — but it is off by default and the CLI and MCP server do not consult it (ADR-0007 Phase 4).
 - **There is no forward secrecy.** The shared secret for a given sender/device pair is static, so compromising either private key opens every past push wrapped for that pair.
 - **The ask loop is not encrypted.** `zeph_ask`, `zeph_prompt` and `zeph_input` travel over the hook route, which carries no sender key: the question's title and body are plaintext, and so is your answer. The server refuses an encrypted file on an answer outright rather than handing the agent bytes it cannot open. (A file the *agent* attaches to a question is the one exception — it carries its own wrapped key.)
 
