@@ -180,6 +180,65 @@ zeph_read_pushmode() {
     esac
 }
 
+# ── Dangerous-command approval (zeph-approve.sh) ─────────────────────────────
+#
+# zeph_approve_needed <command> — rc 0 when this command should wait for the
+# user's approval, rc 1 when it should just run.
+#
+# ⚠️ THIS IS A SPEED BUMP, NOT A SECURITY BOUNDARY. It matches text in a command
+# string, so anything deliberately trying to get past it will
+# (`r''m -rf`, a shell variable, a script that wraps the real call). What it
+# actually protects against is the accident: an agent reaching for `rm -rf` or a
+# prod deploy while the user is away from the terminal and would never have seen
+# the confirmation. Do not describe it as a sandbox, and do not let its presence
+# justify loosening anything that is one.
+#
+# The list is deliberately short. Gating everything trains people to approve
+# without reading, which is worse than not gating at all; gating too little is
+# theatre. These are the operations that are hard to undo:
+#   1. recursive force delete
+#   2. history/working-tree destruction (force push, hard reset, clean -fd)
+#   3. anything that reaches deployed infrastructure
+#   4. destructive database statements
+zeph_approve_needed() {
+    local cmd="$1"
+    [ -n "$cmd" ] || return 1
+
+    # 1. rm carrying BOTH recursive and force, however they are spelled.
+    #    Collapsing every short flag into one string is what makes `-rf`,
+    #    `-fr` and `-r -f` the same question instead of three patterns.
+    if printf '%s' "$cmd" | grep -Eqi '(^|[^[:alnum:]_./-])rm[[:space:]]'; then
+        local flags
+        flags=$(printf '%s' "$cmd" \
+            | sed -e 's/--recursive/-r/g' -e 's/--force/-f/g' \
+            | grep -Eo -- '(^|[[:space:]])-[[:alnum:]]+' \
+            | tr -d ' -\n' | tr 'A-Z' 'a-z')
+        case "$flags" in
+            *r*) case "$flags" in *f*) return 0 ;; esac ;;
+        esac
+    fi
+
+    # 2. Git operations that discard work or rewrite a published history.
+    printf '%s' "$cmd" | grep -Eqi 'git[[:space:]]+push[[:space:]].*(--force|--force-with-lease|(^|[[:space:]])-f([[:space:]]|$))' && return 0
+    printf '%s' "$cmd" | grep -Eqi 'git[[:space:]]+push[[:space:]]+-f([[:space:]]|$)' && return 0
+    printf '%s' "$cmd" | grep -Eqi 'git[[:space:]]+reset[[:space:]]+--hard' && return 0
+    printf '%s' "$cmd" | grep -Eqi 'git[[:space:]]+clean[[:space:]]+-[[:alnum:]]*[fd]' && return 0
+
+    # 3. Anything that reaches deployed infrastructure.
+    printf '%s' "$cmd" | grep -Eqi '(^|[^[:alnum:]_-])(cdk|serverless|sls)[[:space:]]+deploy' && return 0
+    printf '%s' "$cmd" | grep -Eqi '(^|[^[:alnum:]_-])terraform[[:space:]]+(apply|destroy)' && return 0
+    # A package script whose NAME says deploy — `yarn server:deploy:prod`. Kept
+    # to the runner prefix so `grep -rn deploy src/` is not a deploy.
+    printf '%s' "$cmd" | grep -Eqi '(^|[^[:alnum:]_-])(npm[[:space:]]+run|yarn|pnpm[[:space:]]+run|bun[[:space:]]+run)[[:space:]]+[[:alnum:]:_-]*deploy' && return 0
+
+    # 4. Statements that drop data rather than change it.
+    printf '%s' "$cmd" | grep -Eqi 'drop[[:space:]]+(table|database|schema)' && return 0
+    printf '%s' "$cmd" | grep -Eqi 'truncate[[:space:]]+table' && return 0
+    printf '%s' "$cmd" | grep -Eqi 'delete-table|flushall|flushdb' && return 0
+
+    return 1
+}
+
 # ── AskUserQuestion replay markers ───────────────────────────────────────────
 #
 # A deny is only safe if the same question can get through on its next try —
