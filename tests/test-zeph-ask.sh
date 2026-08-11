@@ -64,6 +64,18 @@ run_hook() {
         bash "$HOOK_SCRIPT" 2>/dev/null
 }
 
+# Same as run_hook, but with control over the two signals that decide whether
+# the phone can drive this pane: $TMUX and the listener pid file under $HOME.
+run_hook_mirror() {
+    local input="$1" home="$2" tmux_val="$3"
+    rm -f "$WORK/last-call"
+    printf '%s' "$input" \
+      | CLAUDE_PROJECT_DIR=/tmp/test-project PATH="$STUB_DIR:$PATH" \
+        XDG_STATE_HOME="$WORK/state" XDG_CACHE_HOME="$WORK/cache" \
+        HOME="$home" TMUX="$tmux_val" \
+        bash "$HOOK_SCRIPT" 2>/dev/null
+}
+
 zeph_called()       { [ -f "$WORK/last-call" ]; }
 zeph_silent()       { [ ! -f "$WORK/last-call" ]; }
 zeph_body_has()     { [ -f "$WORK/last-call" ] && grep -qF -- "$1" "$WORK/last-call"; }
@@ -184,6 +196,48 @@ printf 'sess_abc; rm -rf /\n' > "$WORK/cache/zeph/session-$CACHE_HASH"
 run_hook '{"tool_input":{"question":"ready?"}}' "$CACHE_PROJECT"
 assert "rejects non-token cache value"   zeph_no_session
 rm -f "$WORK/cache/zeph/session-$CACHE_HASH"
+
+echo
+echo "[mirror hint — listener alive AND in tmux, so the phone can drive the picker]"
+# The picker renders in `tmux capture-pane` and a `send-keys Down` moves the
+# selection, so a user on the phone CAN answer it — but only when the listener
+# daemon is up and this session sits in a tmux pane. Both signals or neither.
+MIRROR_HOME="$WORK/mirror-home"
+mkdir -p "$MIRROR_HOME/.zeph"
+printf '%s\n' "$$" > "$MIRROR_HOME/.zeph/listener.pid"   # $$ is alive by definition
+run_hook_mirror '{"tool_input":{"question":"ready?"}}' "$MIRROR_HOME" '/tmp/tmux-501/default,1,0'
+assert "body offers the phone's mirror"      zeph_body_has "terminal mirror"
+
+echo
+echo "[mirror hint — outside tmux, no mirror to offer]"
+run_hook_mirror '{"tool_input":{"question":"ready?"}}' "$MIRROR_HOME" ''
+assert "still points at the terminal"        zeph_body_has "answer at the terminal"
+assert_not "makes no mirror claim"           zeph_body_has "terminal mirror"
+
+echo
+echo "[mirror hint — in tmux but listener never ran]"
+NO_LISTENER_HOME="$WORK/no-listener-home"
+mkdir -p "$NO_LISTENER_HOME"
+run_hook_mirror '{"tool_input":{"question":"ready?"}}' "$NO_LISTENER_HOME" '/tmp/tmux-501/default,1,0'
+assert_not "makes no mirror claim"           zeph_body_has "terminal mirror"
+
+echo
+echo "[mirror hint — stale pid file (daemon gone)]"
+STALE_HOME="$WORK/stale-home"
+mkdir -p "$STALE_HOME/.zeph"
+sh -c 'exit 0' & DEAD_PID=$!; wait "$DEAD_PID" 2>/dev/null
+printf '%s\n' "$DEAD_PID" > "$STALE_HOME/.zeph/listener.pid"
+run_hook_mirror '{"tool_input":{"question":"ready?"}}' "$STALE_HOME" '/tmp/tmux-501/default,1,0'
+assert_not "dead pid claims nothing"         zeph_body_has "terminal mirror"
+
+echo
+echo "[mirror hint — garbage pid file can't reach kill]"
+GARBAGE_HOME="$WORK/garbage-home"
+mkdir -p "$GARBAGE_HOME/.zeph"
+printf '%s\n' '-1; rm -rf /' > "$GARBAGE_HOME/.zeph/listener.pid"
+run_hook_mirror '{"tool_input":{"question":"ready?"}}' "$GARBAGE_HOME" '/tmp/tmux-501/default,1,0'
+assert "still pushes"                        zeph_called
+assert_not "non-numeric pid claims nothing"  zeph_body_has "terminal mirror"
 
 echo
 echo "=========================================="
