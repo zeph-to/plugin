@@ -295,11 +295,18 @@ zeph_approve_needed() {
     # 1. rm carrying BOTH recursive and force, however they are spelled.
     #    Collapsing every short flag into one string is what makes `-rf`,
     #    `-fr` and `-r -f` the same question instead of three patterns.
+    #
+    #    The hyphen goes LAST in the tr delete set. Written as ' -\n' it reads
+    #    as a RANGE from space (0x20) to newline (0x0A) — reversed, so GNU tr
+    #    aborts with "range-endpoints ... in reverse collating sequence order"
+    #    and prints nothing. BSD tr takes the same three bytes literally, so on
+    #    macOS it worked and on Linux `flags` came back empty and every
+    #    `rm -rf` walked straight through this gate.
     if grep -Eqi '(^|[^[:alnum:]_./-])rm[[:space:]]' <<< "$cmd"; then
         local flags
         flags=$(sed -e 's/--recursive/-r/g' -e 's/--force/-f/g' <<< "$cmd" \
             | grep -Eo -- '(^|[[:space:]])-[[:alnum:]]+' \
-            | tr -d ' -\n' | tr 'A-Z' 'a-z')
+            | tr -d ' \n-' | tr 'A-Z' 'a-z')
         case "$flags" in *r*f*|*f*r*) return 0 ;; esac
     fi
 
