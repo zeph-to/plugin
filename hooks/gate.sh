@@ -121,6 +121,53 @@ zeph_read_pushmode() {
     esac
 }
 
+# ── Sticky REMOTE state ─────────────────────────────────────────────────────
+#
+# `remote-<hash>` above is a ONE-SHOT entry signal — zeph-remote.sh consumes it
+# the moment a prompt matches. REMOTE outlives that turn, so the mode itself
+# needs somewhere to live: `remote-active-<hash>`, holding the epoch second it
+# was last confirmed. Keeping it in a file (rather than re-deriving it from the
+# conversation) is what makes it survive context compaction.
+#
+# Deliberately NOT routed through zeph_state_present. That helper also honors a
+# legacy /tmp copy, which exists so files written by older versions keep working
+# — this kind has never had a /tmp writer, so the branch could only ever match
+# something stale, and the refresh below always writes the XDG path, so such a
+# file would never expire.
+#
+# The TTL exists because nothing owns "this session ended" — there is no
+# SessionEnd hook — so a crash or Ctrl-C would otherwise latch REMOTE forever
+# and every later session in the project would keep asking a phone nobody is
+# holding. Four hours is generous on purpose: the file is refreshed on every
+# phone prompt and every answered zeph_ask, so it only has to outlive a working
+# session, never an idle user. The TS twin is cli/src/gate.ts REMOTE_TTL_SEC.
+ZEPH_REMOTE_TTL=14400
+
+zeph_remote_state_file() { echo "$ZEPH_STATE_DIR/remote-active-$1"; }
+
+# zeph_remote_active <hash> — rc 0 while REMOTE is live for this project.
+# Expired or unparseable state is deleted on sight, the same housekeeping a
+# stale entry marker gets: state that can never flag again is dead weight.
+zeph_remote_active() {
+    local file ts
+    file=$(zeph_remote_state_file "$1")
+    [ -f "$file" ] || return 1
+    read -r ts < "$file" 2>/dev/null || ts=""
+    case "$ts" in '' | *[!0-9]*) rm -f "$file"; return 1 ;; esac
+    if [ $(( $(date +%s) - ts )) -gt "$ZEPH_REMOTE_TTL" ]; then
+        rm -f "$file"
+        return 1
+    fi
+    return 0
+}
+
+# zeph_remote_touch <hash> — enter REMOTE, or push its expiry back. Always rc 0:
+# a state dir that cannot be written must never fail the hook that called this.
+zeph_remote_touch() {
+    mkdir -p "$ZEPH_STATE_DIR" 2>/dev/null || return 0
+    date +%s > "$(zeph_remote_state_file "$1")" 2>/dev/null || return 0
+}
+
 # zeph_wrap_timeout <cmd> — bound a CLI invocation below the 10s hooks.json
 # cap, so a cold `npx -y` resolve or a hung network can't eat the whole hook
 # budget. macOS ships no `timeout` in the base system (gtimeout comes from

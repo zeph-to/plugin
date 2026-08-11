@@ -55,6 +55,15 @@ hash_of() { printf '%s' "$1" | cksum | cut -d' ' -f1; }
 sha_of()  { printf '%s' "$1" | shasum -a 256 | cut -d' ' -f1; }
 
 marker_path() { echo "$WORK/state/zeph/remote-$(hash_of "$1")"; }
+state_path()  { echo "$WORK/state/zeph/remote-active-$(hash_of "$1")"; }
+
+# write_state <project_dir> [age_seconds] — sticky REMOTE state, as the hook
+# writes it: one epoch second naming the last time REMOTE was confirmed.
+write_state() {
+    local dir="$1" age="${2:-0}"
+    mkdir -p "$WORK/state/zeph"
+    printf '%s\n' "$(( $(date +%s) - age ))" > "$(state_path "$dir")"
+}
 
 # write_marker <project_dir> <text> [age_seconds]
 write_marker() {
@@ -190,6 +199,93 @@ printf '%s %s\n' "$(date +%s)" "$(sha_of "legacy path text")" > "$LEGACY"
 CTX=$(run_hook "legacy path text" "$P" "hook_123" | ctx_of)
 assert "legacy marker matches"   [ -n "$CTX" ]
 assert "legacy marker consumed"  [ ! -f "$LEGACY" ]
+
+echo
+echo "[sticky state alive, no marker → reminder (the device-switch case)]"
+P="$WORK/proj-sticky"
+write_state "$P"
+OUT=$(run_hook "typed at the terminal mid-session" "$P" "hook_123")
+RC=$?
+CTX=$(printf '%s' "$OUT" | ctx_of)
+assert "exit 0"                  [ "$RC" -eq 0 ]
+assert "emits a reminder"        grep -q "REMOTE" <<<"$CTX"
+assert "state kept"              [ -f "$(state_path "$P")" ]
+assert_not "not the entry note"  grep -q "arrived from the user's phone" <<<"$CTX"
+
+echo
+echo "[marker match writes the sticky state]"
+P="$WORK/proj-enter"
+write_marker "$P" "start from the phone"
+CTX=$(run_hook "start from the phone" "$P" "hook_123" | ctx_of)
+assert "entered REMOTE"   [ -n "$CTX" ]
+assert "state written"    [ -f "$(state_path "$P")" ]
+assert "marker consumed"  [ ! -f "$(marker_path "$P")" ]
+
+echo
+echo "[sticky state alive but muted → silent (mute outranks, Rule 12)]"
+P="$WORK/proj-sticky-muted"
+write_state "$P"
+touch "$WORK/state/zeph/muted-$(hash_of "$P")"
+OUT=$(run_hook "anything" "$P" "hook_123")
+assert "no output"   [ -z "$OUT" ]
+assert "state kept"  [ -f "$(state_path "$P")" ]
+
+echo
+echo "[sticky state past the TTL → silent, state swept (no SessionEnd hook exists)]"
+P="$WORK/proj-sticky-stale"
+write_state "$P" 20000
+OUT=$(run_hook "much later" "$P" "hook_123")
+RC=$?
+assert "no output"       [ -z "$OUT" ]
+assert "exit 0"          [ "$RC" -eq 0 ]
+assert "state deleted"   [ ! -f "$(state_path "$P")" ]
+
+echo
+echo "[sticky state alive, ZEPH_HOOK_ID unset → silent (no zeph_ask to remind about)]"
+P="$WORK/proj-sticky-oneway"
+write_state "$P"
+OUT=$(run_hook "typed at the terminal" "$P")
+assert "no output"   [ -z "$OUT" ]
+assert "state kept"  [ -f "$(state_path "$P")" ]
+
+echo
+echo "[garbled sticky state → silent, swept]"
+P="$WORK/proj-sticky-garbage"
+mkdir -p "$WORK/state/zeph"
+printf 'not-a-timestamp\n' > "$(state_path "$P")"
+OUT=$(run_hook "whatever" "$P" "hook_123")
+RC=$?
+assert "no output"      [ -z "$OUT" ]
+assert "exit 0"         [ "$RC" -eq 0 ]
+assert "state deleted"  [ ! -f "$(state_path "$P")" ]
+
+echo
+echo "[state written as an exponent is swept, not read as a far-future stamp]"
+# Parity regression: bash rejects any non-digit, so the TS twin must too —
+# Number('1e10') would otherwise resolve to a year-2286 timestamp and keep
+# REMOTE alive forever on a file bash throws away.
+P="$WORK/proj-sticky-exponent"
+mkdir -p "$WORK/state/zeph"
+printf '1e10\n' > "$(state_path "$P")"
+OUT=$(run_hook "whatever" "$P" "hook_123")
+assert "no output"      [ -z "$OUT" ]
+assert "state deleted"  [ ! -f "$(state_path "$P")" ]
+
+echo
+echo "[unremovable marker still enters REMOTE (housekeeping is not the verdict)]"
+# Regression: the match function used to return `rm`'s status, so a state dir
+# the user cannot write turned a verified phone message into a no-match.
+if [ "$(id -u)" -eq 0 ]; then
+    echo "  – skipped (running as root; rm cannot be made to fail)"
+else
+    P="$WORK/proj-rm-fails"
+    write_marker "$P" "phone text under a locked dir"
+    chmod 555 "$WORK/state/zeph"
+    CTX=$(run_hook "phone text under a locked dir" "$P" "hook_123" | ctx_of)
+    chmod 755 "$WORK/state/zeph"
+    assert "still enters REMOTE"  grep -q "REMOTE mode" <<<"$CTX"
+    rm -f "$(marker_path "$P")"
+fi
 
 # ── summary ────────────────────────────────────────────────────────────────
 

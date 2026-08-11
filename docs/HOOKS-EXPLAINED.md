@@ -13,7 +13,7 @@ The plugin installs 4 hooks that fire automatically on Claude Code events:
 | **SessionStart** | Session begins | zeph-setup.js | Inject behavioral rules into context |
 | **Stop** | Response ends | zeph-stop.sh | Send completion notification if work was done |
 | **PreToolUse** (Ask) | Before AskUserQuestion | zeph-ask.sh | Send notification when Claude asks user a question |
-| **UserPromptSubmit** | Prompt submitted | zeph-remote.sh | Flag phone-sent messages → sticky REMOTE mode (ADR-0002) |
+| **UserPromptSubmit** | Prompt submitted | zeph-remote.sh | Flag phone-sent messages, and hold sticky REMOTE mode across later turns (ADR-0002) |
 
 ---
 
@@ -231,24 +231,50 @@ ls "${XDG_STATE_HOME:-$HOME/.local/state}/zeph/muted-$HASH"
 
 ## Remote-Origin Hook (zeph-remote.sh)
 
-**What it does (ADR-0002):**
-- Fires on every prompt submit, but stays a silent no-op unless the prompt
-  matches a marker the `zeph listener` wrote when it injected a phone message
-  into this project's tmux pane
+**What it does (ADR-0002):** two jobs — entering REMOTE, and staying there.
+
+*Entry:*
+- Fires on every prompt submit, and enters REMOTE only when the prompt matches
+  a marker the `zeph listener` wrote as it injected a phone message into this
+  project's tmux pane
 - Match = same project (cksum of dir) + fresh (≤15 min) + byte-identical
   sha256 of the trimmed text — a terminal keystroke can never false-match
-- On match: consumes the marker (one-shot) and injects context telling the
-  model the user is remote → sticky REMOTE mode (every response ends with an
-  answerable `zeph_ask`)
+- On match: consumes the marker (one-shot), records the mode in the state file
+  below, and injects context telling the model the user is remote → sticky
+  REMOTE mode (every response ends with an answerable `zeph_ask`)
 - Without `ZEPH_HOOK_ID`: one-way variant — tells the model to make the
-  Stop-hook push self-contained and mention `npx @zeph-to/cli setup` once
+  Stop-hook push self-contained and mention `npx @zeph-to/cli setup` once. No
+  state is recorded: without `zeph_ask` there is no mode to stay in
 
-**Marker file** (written by cli `listener.ts`, consumed here):
+*Staying there:*
+- The marker is one-shot, but REMOTE is not. A user who answers from the phone
+  and then types at the terminal produces turns with no marker and no
+  `zeph_ask` result — the mode used to run out of evidence exactly there
+- So every later prompt re-reads the state file and re-states the mode in one
+  sentence. Living in a file is also what makes it survive context compaction,
+  which is what Rule 13 promises
+- Mute still outranks both jobs, and neither ever blocks a prompt (always
+  exit 0, including on state-file IO failure)
+
+**Marker file** — entry signal, written by cli `listener.ts`, consumed here:
 
 ```
 ${XDG_STATE_HOME:-$HOME/.local/state}/zeph/remote-<hash>
 content: "<epochSeconds> <sha256hex-of-trimmed-text>\n"
 ```
+
+**State file** — the mode itself, written and read here (`gate.sh`
+`zeph_remote_active` / `zeph_remote_touch`; TS twin `cli/src/gate.ts`):
+
+```
+${XDG_STATE_HOME:-$HOME/.local/state}/zeph/remote-active-<hash>
+content: "<epochSeconds it was last confirmed>\n"
+```
+
+It expires 4 hours after its last refresh, and every phone prompt or answered
+`zeph_ask` refreshes it. The TTL is the only thing that ends a session nobody
+exited: there is no SessionEnd hook, so without it a crash would leave REMOTE
+latched and later sessions in this project would keep asking an absent phone.
 
 **Example flow:**
 
@@ -259,11 +285,16 @@ listener injects into tmux pane + writes remote-<hash> marker
   ↓
 Claude Code submits the prompt → UserPromptSubmit hook fires:
   1. marker exists, fresh, sha256 matches → rm marker
-  2. emit additionalContext: "user is remote → sticky REMOTE mode"
+  2. write remote-active-<hash>
+  3. emit additionalContext: "user is remote → sticky REMOTE mode"
   ↓
 Claude does the work, ends the response with zeph_ask
   ↓
 User answers with a button tap — the loop continues from the phone
+  ↓
+...later the user types at the terminal instead. No marker, no zeph_ask
+result — but remote-active-<hash> is still live, so the hook emits:
+  "still in sticky REMOTE mode — end this response with zeph_ask"
 ```
 
 **Debugging:**
