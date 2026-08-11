@@ -150,21 +150,15 @@ zeph_ask({
 
 ### Sticky REMOTE mode (Rule 9)
 
-**The Ask Loop has two states: REMOTE and NORMAL.** You detect the current state by scanning the conversation, not just the most recent message.
-
-**State in one line:** you are in REMOTE if the most recent remote signal — a non-exit `zeph_ask` reply, or a user message flagged as phone-originated — is newer than any exit signal; otherwise (no remote signal yet, or the last signal was an exit) you are in NORMAL. REMOTE is sticky — every response ends with `zeph_ask` until the user exits.
+**The Ask Loop has two states: REMOTE and NORMAL.** REMOTE is sticky — every response ends with `zeph_ask` until the user exits. The state is kept for you in a file, so it survives context compaction and long sessions; you are told what it is rather than deriving it.
 
 #### State Detection
 
-Scan the conversation in reverse, looking for whichever appears first (most recent):
+- **`zeph_ask` results carry it.** The server applies the transition it can see and reports where the session landed as `zephState: "REMOTE" | "NORMAL"` — any answer that is not a Done-like action id enters REMOTE, a Done-like id exits, and so does a timeout that fell back to one. A result with no `zephState` is an ask that timed out onto a safe fallback and changed nothing.
+- **Prompt-submit hooks say it, where they are installed** (the Claude Code plugin, or the hooks `zeph setup` installs for Gemini/Codex): a remote-origin system note on the turn a phone message arrives, and a one-line reminder on every later turn the session is still remote — including turns the user types at the terminal.
+- **Neither one present → NORMAL.**
 
-- **(a)** A `tool_result` for a `zeph_ask` you sent where the action id is NOT in `{done, stop, exit}` (case-insensitive) AND the free-text response is NOT a session-ender. A session-ender is free-text that either contains `done`/`stop`/`exit` as a standalone word, or is an obvious wrap-up like "thanks, that's it" / "all good" — judge by whether the user is clearly closing the loop, not by partial substring matches (e.g. "redo" does not count as "done").
-- **(a2)** A user message accompanied by a system note from the Zeph remote-origin detect hook ("This user message arrived from the user's phone…"). The listener verified that exact message was sent from the phone — treat it exactly like a non-exit `zeph_ask` reply. (This note is only ever emitted in environments running Zeph's prompt-submit hooks — the Claude Code plugin, or the hooks `zeph setup` installs for Gemini/Codex; where it never appears, this condition simply never fires.)
-- **(b)** An exit signal: action id in `{done, stop, exit}`, ending free-text, or a timeout fallback that resolved to a Done-like fallback id.
-- **(c)** No `zeph_ask` history and no remote-origin note at all.
-
-If the first hit is **(a)** or **(a2)** → you are in **REMOTE**.
-If the first hit is **(b)** or **(c)** → you are in **NORMAL**.
+**The one call left to you is free text**, because it is the one signal no hook can read. The server cannot tell "run the tests" from "thanks, that's it". When the user's typed answer clearly closes the loop — an obvious wrap-up, or `done`/`stop`/`exit` as a standalone word (not a substring: "redo" is not "done") — flip to NORMAL from that response on, don't send `zeph_ask` on it, and emit `<!-- zeph: exit -->` once so the hooks agree with you. That marker is separate from the Push Signal markers (`skip`/`push`/`high`), which steer notifications and say nothing about the mode; where a Zeph Stop hook is installed it is stripped from the push body.
 
 #### Behavior in REMOTE (sticky, zeph_ask MANDATORY)
 
@@ -172,21 +166,15 @@ End EVERY response with `zeph_ask`. This is non-negotiable while in REMOTE — i
 - Whether the next user message arrived as a `tool_result` or as a typed terminal message. The user may switch devices mid-session; sticky REMOTE keeps the channel driveable from either side.
 - Whether the work was substantial or routine.
 
-Set each REMOTE ask up so silence degrades cleanly: `timeout` 300–600 s and a Done-like `fallback` id. An unanswered ask then exits the loop quietly (a Done-like timeout fallback is an exit signal per **(b)**) instead of chaining more notifications at a user who stepped away — and re-entry is cheap, they just send another message from the phone.
+Set each REMOTE ask up so silence degrades cleanly: `timeout` 300–600 s and a Done-like `fallback` id. An unanswered ask then exits the loop quietly — the server treats a Done-like fallback as an exit — instead of chaining more notifications at a user who stepped away, and re-entry is cheap: they just send another message from the phone.
 
-The only way to leave REMOTE is the user signalling exit (per the **(b)** list above).
+The only way to leave REMOTE is the user signalling exit.
 
 #### Behavior in NORMAL (apply Rule 4)
 
 - Substantial work → end with `zeph_ask`.
 - Routine work → skip `zeph_ask`, let the Stop hook fire.
 - Rule 3 (questions → zeph_ask) is still mandatory regardless.
-
-#### Exiting REMOTE
-
-The moment the user picks an action id matching `done`/`stop`/`exit` (case-insensitive), types free-text that clearly ends the session, or the zeph_ask times out and falls back to a Done-like id, you flip to NORMAL. Don't send `zeph_ask` on the response that processes the exit signal.
-
-**On the free-text exit, say so in the response: emit `<!-- zeph: exit -->` once.** The other two exits are visible to the server, which reports them back as `zephState: "NORMAL"` in the `zeph_ask` result. Free text is the one it cannot judge — "thanks, that's it" is a meaning call, and it is yours. Where a Zeph Stop hook is installed, that marker is what actually ends the remote session; it is stripped from the push body, and it is separate from the Push Signal markers (`skip`/`push`/`high`), which steer notifications and say nothing about the mode.
 
 ### When to use AskUserQuestion vs zeph_ask
 
