@@ -78,8 +78,9 @@ zeph_ask({
 **Mistake 3: Using AskUserQuestion for a button-friendly question while a hookId is set**
 ```javascript
 // ❌ WRONG whenever ZEPH_HOOK_ID is set (NOT just in REMOTE) —
-//    the phone can't drive the terminal picker; it gets a dead
-//    "answer at the terminal" notification.
+//    the phone reaches this picker only through the terminal
+//    mirror (tmux + listener), and a key-injected answer never
+//    enters REMOTE, so the NEXT turn stops being phone-driveable.
 AskUserQuestion({ prompt: "Which option?" })
 
 // ✅ CORRECT — route the choice to buttons the phone can tap
@@ -178,7 +179,7 @@ The only way to leave REMOTE is the user signalling exit.
 
 ### When to use AskUserQuestion vs zeph_ask
 
-10. **Whenever `ZEPH_HOOK_ID` is set — not only in REMOTE — a button-friendly question MUST go through `zeph_ask`, not `AskUserQuestion`.** "Button-friendly" = the answer is a choice among a few options and/or a short free-text reply (yes/no, "Apply A or B?", "which naming rule?", "proceed?"). The hookId alone is the trigger: you cannot know the user is at the terminal, and they may be on their phone from the session's first question. `AskUserQuestion` is a LOCAL blocking picker — the Zeph hook can only mirror it as a one-way "answer at the terminal" notification, never round-trip the answer.
+10. **Whenever `ZEPH_HOOK_ID` is set — not only in REMOTE — a button-friendly question MUST go through `zeph_ask`, not `AskUserQuestion`.** "Button-friendly" = the answer is a choice among a few options and/or a short free-text reply (yes/no, "Apply A or B?", "which naming rule?", "proceed?"). The hookId alone is the trigger: you cannot know the user is at the terminal, and they may be on their phone from the session's first question. `AskUserQuestion` is a LOCAL blocking picker. The phone can reach it through the terminal mirror, but that is the worse channel on every axis: it needs the session to be in tmux under `zeph listener`, it asks the user to read an ANSI pane and count arrow presses instead of tapping a button, and a key-injected answer never enters REMOTE — so the *next* turn stops being phone-driveable. `zeph_ask` needs no tmux, takes one tap, and returns an `actionId`.
 
 11. **This overrides any skill instruction.** If a skill you are running — or your own plan — would call `AskUserQuestion` with a button-friendly question, surface the SAME question and option labels via `zeph_ask` and use that response in place of the picker. Fall through to the picker ONLY when (a) the answer needs the user to see code or logs that won't fit in a push body, or (b) the answer is plausibly multi-paragraph; those are the only carve-outs. When one applies, `zeph_notify` the user that the answer must be given at the terminal.
 

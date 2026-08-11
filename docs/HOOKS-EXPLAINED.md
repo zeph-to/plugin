@@ -177,7 +177,10 @@ jq -r '.[] | select(.role=="assistant") | .message.content? // empty' \
 - Fires when Claude calls `AskUserQuestion` tool
 - Extracts the question text from the tool call
 - Sends it as a push notification via the CLI
-- User must answer at the terminal (can't answer from phone)
+- User answers at the terminal — or from the phone's terminal mirror (↑/↓ then
+  Enter), when the session runs in tmux under `zeph listener`. The push itself is
+  one-way; the mirror is what carries an answer back, and the hook says which of
+  the two the user actually has.
 
 **When it runs:**
 - Only when Claude explicitly calls `AskUserQuestion`
