@@ -54,6 +54,11 @@ assert_not() {
     fi
 }
 
+# Every runner pins the whole environment the hook reads — ZEPH_HOOK_ID, HOME,
+# TMUX — rather than inheriting any of it. Each one changes an assertion:
+# a hook id routes the question to zeph_ask instead of pushing, and HOME + TMUX
+# decide whether the body offers the phone's terminal mirror. Inherited, they
+# make these tests pass in CI and fail on the machine of anyone who runs zeph.
 run_hook() {
     local input="$1"
     local project_dir="${2:-/tmp/test-project}"
@@ -61,6 +66,33 @@ run_hook() {
     printf '%s' "$input" \
       | CLAUDE_PROJECT_DIR="$project_dir" PATH="$STUB_DIR:$PATH" \
         XDG_STATE_HOME="$WORK/state" XDG_CACHE_HOME="$WORK/cache" \
+        ZEPH_HOOK_ID="" HOME="$WORK/no-listener-home" TMUX="" \
+        bash "$HOOK_SCRIPT" 2>/dev/null
+}
+
+# Runner for the routing path: a hook id exists, so a push-shaped question is
+# denied and handed back for zeph_ask. Each call gets its own state dir so a
+# replay marker from one case can't allow the next one through.
+run_hook_routed() {
+    local input="$1"
+    local state_dir="${2:-$WORK/routed-state-$RANDOM}"
+    rm -f "$WORK/last-call"
+    printf '%s' "$input" \
+      | CLAUDE_PROJECT_DIR=/tmp/test-project PATH="$STUB_DIR:$PATH" \
+        XDG_STATE_HOME="$state_dir" XDG_CACHE_HOME="$WORK/cache" \
+        ZEPH_HOOK_ID="hook_test_id" HOME="$WORK/no-listener-home" TMUX="" \
+        bash "$HOOK_SCRIPT" 2>/dev/null
+}
+
+# Same as run_hook, but with control over the two signals that decide whether
+# the phone can drive this pane: $TMUX and the listener pid file under $HOME.
+run_hook_mirror() {
+    local input="$1" home="$2" tmux_val="$3"
+    rm -f "$WORK/last-call"
+    printf '%s' "$input" \
+      | CLAUDE_PROJECT_DIR=/tmp/test-project PATH="$STUB_DIR:$PATH" \
+        XDG_STATE_HOME="$WORK/state" XDG_CACHE_HOME="$WORK/cache" \
+        HOME="$home" TMUX="$tmux_val" ZEPH_HOOK_ID="" \
         bash "$HOOK_SCRIPT" 2>/dev/null
 }
 
@@ -184,6 +216,122 @@ printf 'sess_abc; rm -rf /\n' > "$WORK/cache/zeph/session-$CACHE_HASH"
 run_hook '{"tool_input":{"question":"ready?"}}' "$CACHE_PROJECT"
 assert "rejects non-token cache value"   zeph_no_session
 rm -f "$WORK/cache/zeph/session-$CACHE_HASH"
+
+echo
+echo "[mirror hint — listener alive AND in tmux, so the phone can drive the picker]"
+# The picker renders in `tmux capture-pane` and a `send-keys Down` moves the
+# selection, so a user on the phone CAN answer it — but only when the listener
+# daemon is up and this session sits in a tmux pane. Both signals or neither.
+MIRROR_HOME="$WORK/mirror-home"
+mkdir -p "$MIRROR_HOME/.zeph"
+printf '%s\n' "$$" > "$MIRROR_HOME/.zeph/listener.pid"   # $$ is alive by definition
+run_hook_mirror '{"tool_input":{"question":"ready?"}}' "$MIRROR_HOME" '/tmp/tmux-501/default,1,0'
+assert "body offers the phone's mirror"      zeph_body_has "terminal mirror"
+
+echo
+echo "[mirror hint — outside tmux, no mirror to offer]"
+run_hook_mirror '{"tool_input":{"question":"ready?"}}' "$MIRROR_HOME" ''
+assert "still points at the terminal"        zeph_body_has "answer at the terminal"
+assert_not "makes no mirror claim"           zeph_body_has "terminal mirror"
+
+echo
+echo "[mirror hint — in tmux but listener never ran]"
+NO_LISTENER_HOME="$WORK/no-listener-home"
+mkdir -p "$NO_LISTENER_HOME"
+run_hook_mirror '{"tool_input":{"question":"ready?"}}' "$NO_LISTENER_HOME" '/tmp/tmux-501/default,1,0'
+assert_not "makes no mirror claim"           zeph_body_has "terminal mirror"
+
+echo
+echo "[mirror hint — stale pid file (daemon gone)]"
+STALE_HOME="$WORK/stale-home"
+mkdir -p "$STALE_HOME/.zeph"
+sh -c 'exit 0' & DEAD_PID=$!; wait "$DEAD_PID" 2>/dev/null
+printf '%s\n' "$DEAD_PID" > "$STALE_HOME/.zeph/listener.pid"
+run_hook_mirror '{"tool_input":{"question":"ready?"}}' "$STALE_HOME" '/tmp/tmux-501/default,1,0'
+assert_not "dead pid claims nothing"         zeph_body_has "terminal mirror"
+
+echo
+echo "[mirror hint — garbage pid file can't reach kill]"
+GARBAGE_HOME="$WORK/garbage-home"
+mkdir -p "$GARBAGE_HOME/.zeph"
+printf '%s\n' '-1; rm -rf /' > "$GARBAGE_HOME/.zeph/listener.pid"
+run_hook_mirror '{"tool_input":{"question":"ready?"}}' "$GARBAGE_HOME" '/tmp/tmux-501/default,1,0'
+assert "still pushes"                        zeph_called
+assert_not "non-numeric pid claims nothing"  zeph_body_has "terminal mirror"
+
+echo
+echo "[routing — a push-shaped question is blocked and handed to zeph_ask]"
+OUT=$(run_hook_routed '{"tool_input":{"questions":[{"question":"Apply fix A or B?","options":[{"label":"Apply A"},{"label":"Apply B"}]}]}}')
+deny_json_has() { printf '%s' "$OUT" | jq -e "$1" >/dev/null 2>&1; }
+assert "emits a PreToolUse deny"       deny_json_has '.hookSpecificOutput.permissionDecision == "deny"'
+assert "echoes the hook event name"    deny_json_has '.hookSpecificOutput.hookEventName == "PreToolUse"'
+assert "names zeph_ask in the reason"  deny_json_has '.hookSpecificOutput.permissionDecisionReason | test("zeph_ask")'
+assert "carries the question verbatim" deny_json_has '.hookSpecificOutput.permissionDecisionReason | test("Apply fix A or B\\?")'
+assert "carries the option labels"     deny_json_has '.hookSpecificOutput.permissionDecisionReason | test("Apply A")'
+# The model's zeph_ask will push; a notify here would double-send the question.
+assert "sends no push of its own"      zeph_silent
+
+echo
+echo "[routing — the reason is not truncated like a feed preview]"
+LONG_Q=$(python3 -c "print('Should we ' + 'really ' * 30 + 'do it?')")   # ~230 chars, under the 400 limit
+OUT=$(run_hook_routed "$(printf '{"tool_input":{"questions":[{"question":"%s","options":[{"label":"Yes"}]}]}}' "$LONG_Q")")
+assert "keeps the whole question"      deny_json_has "$(printf '.hookSpecificOutput.permissionDecisionReason | test("do it\\\\?")')"
+
+echo
+echo "[routing — carve-out (a): an option preview needs the terminal]"
+OUT=$(run_hook_routed '{"tool_input":{"questions":[{"question":"Which layout?","options":[{"label":"A","preview":"+---+\n|   |\n+---+"},{"label":"B"}]}]}}')
+assert_not "does not deny"             deny_json_has '.hookSpecificOutput.permissionDecision == "deny"'
+assert "falls through to the push"     zeph_called
+
+echo
+echo "[routing — carve-out (b): a long option description needs the terminal]"
+LONG_D=$(python3 -c "print('detail ' * 40)")   # ~280 chars, over the 240 limit
+OUT=$(run_hook_routed "$(printf '{"tool_input":{"questions":[{"question":"Pick","options":[{"label":"A","description":"%s"},{"label":"B"}]}]}}' "$LONG_D")")
+assert_not "does not deny"             deny_json_has '.hookSpecificOutput.permissionDecision == "deny"'
+assert "falls through to the push"     zeph_called
+
+echo
+echo "[routing — no hook id means no zeph_ask to route to]"
+run_hook '{"tool_input":{"questions":[{"question":"Apply fix?","options":[{"label":"Yes"}]}]}}'
+assert "pushes instead of denying"     zeph_called
+
+echo
+echo "[routing — a retry gets through so the session cannot be trapped]"
+REPLAY_STATE="$WORK/replay-state"
+SAME='{"tool_input":{"questions":[{"question":"Proceed?","options":[{"label":"Yes"},{"label":"No"}]}]}}'
+OUT=$(run_hook_routed "$SAME" "$REPLAY_STATE")
+assert "first attempt is denied"       deny_json_has '.hookSpecificOutput.permissionDecision == "deny"'
+OUT=$(run_hook_routed "$SAME" "$REPLAY_STATE")
+assert_not "second attempt is allowed" deny_json_has '.hookSpecificOutput.permissionDecision == "deny"'
+assert "and pushes as before"          zeph_called
+
+echo
+echo "[routing — a different question in the same window is still denied]"
+OTHER='{"tool_input":{"questions":[{"question":"Continue?","options":[{"label":"Yes"},{"label":"No"}]}]}}'
+OUT=$(run_hook_routed "$OTHER" "$REPLAY_STATE")
+assert "no collision with the first"   deny_json_has '.hookSpecificOutput.permissionDecision == "deny"'
+
+echo
+echo "[routing — input jq cannot read is pushed, not denied]"
+# A deny here would block the picker over a question the hook never managed to
+# read, leaving the model a reason built from empty strings.
+run_hook_routed 'not-json-at-all{'
+assert "unmeasurable input still pushes" zeph_called
+
+echo
+echo "[routing — the deny path never shells out to the CLI]"
+# A stub that fails loudly stands in for the real binary: if the deny path
+# called it, the marker file would exist. The undocumented hook-timeout
+# behaviour is why this path must not be able to block at all.
+cat > "$STUB_DIR/zeph" <<EOF
+#!/bin/bash
+printf '%s\n' "\$@" > "$WORK/last-call"
+touch "$WORK/cli-was-called"
+EOF
+chmod +x "$STUB_DIR/zeph"
+rm -f "$WORK/cli-was-called"
+run_hook_routed '{"tool_input":{"questions":[{"question":"Deploy now?","options":[{"label":"Yes"}]}]}}' >/dev/null
+assert "no CLI invocation on deny"     test ! -f "$WORK/cli-was-called"
 
 echo
 echo "=========================================="

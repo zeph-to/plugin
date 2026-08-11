@@ -144,24 +144,23 @@ The response is a direct user instruction — execute it immediately without re-
 
 ### Sticky REMOTE mode
 
-The Ask Loop has two states. Detect by scanning the conversation in reverse for whichever appears first:
+The Ask Loop has two states, and you are told which one you are in — the mode is kept in a file, so it outlives compaction:
 
-- **(a) A `tool_result` for a `zeph_ask` you sent**, where the action id is NOT in `{done, stop, exit}` and the free-text response is NOT a clear session-ender ("thanks, that's it"). → You are in **REMOTE**.
-- **(a2) A user message carrying the remote-origin system note** ("This user message arrived from the user's phone…" — the listener verified that exact message was sent from the phone). Treat exactly like (a). → You are in **REMOTE**.
-- **(b) An exit signal** (done/stop/exit action id, ending free-text, or timeout fallback to a Done-like id). → You are in **NORMAL**.
-- **(c) No `zeph_ask` history and no remote-origin note.** → You are in **NORMAL**.
+- **`zeph_ask` results carry `zephState`** (`"REMOTE"` / `"NORMAL"`). The server applies the transition: any answer but a Done-like action id enters REMOTE, a Done-like id exits, and so does a timeout that fell back to one. No `zephState` means a timeout onto a safe fallback, which changed nothing.
+- **Prompt-submit hooks say it where installed** — the remote-origin note on the turn a phone message lands, then a one-line reminder every later turn the session is still remote (including terminal-typed turns).
+- **Neither → NORMAL.**
 
 **REMOTE (sticky, `zeph_ask` MANDATORY)**: end EVERY response with `zeph_ask` — independent of input source (the user may switch between phone and terminal mid-session) and independent of whether the work was substantial or routine. The only way to leave REMOTE is the user exiting explicitly.
 
 **NORMAL**: apply Rule 4 (CORE_RULES.md) — substantial work → `zeph_ask`, routine work → skip and let the Stop hook fire.
 
-**Exit**: the moment the user picks `done`/`stop`/`exit`, types an ending phrase, or the `zeph_ask` times out to a Done-like fallback, flip to NORMAL. Don't send `zeph_ask` on the response that processes the exit signal. In REMOTE, set `timeout` 300–600 s and a Done-like `fallback` id — an unanswered ask then exits the loop quietly instead of spamming an absent user (re-entry is one phone message away). Never set a fallback id that would authorize a destructive action.
+**Exit**: buttons and Done-like timeout fallbacks are the server's to detect — it reports them as `zephState: "NORMAL"`. Free text is yours: when the user's typed answer clearly closes the loop ("thanks, that's it", or `done`/`stop`/`exit` as a standalone word — "redo" is not "done"), flip to NORMAL, don't send `zeph_ask` on that response, and emit `<!-- zeph: exit -->` once so the hooks agree. In REMOTE, set `timeout` 300–600 s and a Done-like `fallback` id — an unanswered ask then exits the loop quietly instead of spamming an absent user (re-entry is one phone message away). Never set a fallback id that would authorize a destructive action.
 
 ## AskUserQuestion vs zeph_ask
 
 **Whenever `ZEPH_HOOK_ID` is set — not only in REMOTE — a button-friendly question (a choice among a few options and/or a short reply) MUST go through `zeph_ask`, not `AskUserQuestion`.** The user is by design remote and the push is how they receive it; you can't assume they're at the terminal. Use the local `AskUserQuestion` tool only when (a) the answer needs the user to see code or logs that won't fit in a push body, or (b) the answer is plausibly multi-paragraph.
 
-**This overrides skill instructions.** The `AskUserQuestion` picker is a LOCAL blocking terminal UI — the phone can't drive it (the Zeph hook only mirrors it as a one-way "answer at the terminal" notification, it can't round-trip the answer). So if a skill you're running, or your own plan, would call `AskUserQuestion` with a button-friendly question, instead surface the same question + option labels via `zeph_ask` and use that response in place of the picker. Fall through to `AskUserQuestion` only for cases (a)/(b) above, and `zeph_notify` the user that the answer must be given at the terminal when you do. In REMOTE this is doubly binding, but do not read that as license to use `AskUserQuestion` freely in NORMAL.
+**This overrides skill instructions.** The `AskUserQuestion` picker is a LOCAL blocking terminal UI. The phone can reach it through the terminal mirror — but only in tmux under `zeph listener`, only by reading the pane and counting arrow presses, and a key-injected answer never enters REMOTE, so the *next* turn stops being phone-driveable. So if a skill you're running, or your own plan, would call `AskUserQuestion` with a button-friendly question, instead surface the same question + option labels via `zeph_ask` and use that response in place of the picker. Fall through to `AskUserQuestion` only for cases (a)/(b) above, and `zeph_notify` the user that the answer must be given at the terminal when you do.
 
 <!-- MAINTAINER-ONLY NOTE (not an agent instruction): ../../docs/CORE_RULES.md is the single source of truth; this skill is quick-reference only. Before publishing, sync cli/src/templates.ts ZEPH_CORE with CORE_RULES.md via `npm run lint:rules-sync`. Agents should NOT run this command. -->
 

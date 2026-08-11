@@ -173,6 +173,28 @@ MARKER_RE='<!--[[:blank:]]*zeph:[[:blank:]]*(skip|push|high)[[:blank:]]*-->'
 MARKER=""
 [[ "$TEXT" =~ $MARKER_RE ]] && MARKER="${BASH_REMATCH[1]}"
 
+# Exit marker — the model's half of the sticky-REMOTE state machine. The server
+# owns the exits it can see (a Done-like button, a Done-like timeout fallback);
+# the one it cannot is free text that means "we're finished", which is a
+# meaning call. So the model emits `<!-- zeph: exit -->` on that response and
+# this clears the state file.
+#
+# A SEPARATE pattern from MARKER_RE on purpose: that one is the push-gate
+# vocabulary, parity-locked to cli/src/gate.ts's GateMarker union and to
+# gate-vectors.json. Adding a fourth word there would drag the TS union, the
+# `*)` fallback and every vector along for a marker the gate has no opinion
+# about. Same one-pattern-drives-detect-and-strip discipline though — the strip
+# below uses this very variable.
+#
+# Placed HERE, above the gate: `zeph_gate_decide` returns silent for a stock
+# quiet install, so anything after it never runs on the common path. The three
+# exits above this line are all before the response text is even read: mute and
+# a missing transcript are covered by the state TTL instead, and the
+# already-asked dedup is harmless — an exit response sends no zeph_ask, so it
+# never trips.
+EXIT_RE='<!--[[:blank:]]*zeph:[[:blank:]]*exit[[:blank:]]*-->'
+[[ "$TEXT" =~ $EXIT_RE ]] && zeph_remote_clear "$MUTE_HASH"
+
 # ── Gate ─────────────────────────────────────────────────────────────────────
 # The decision lives in gate.sh (zeph_gate_decide) — a pure function shared,
 # via gate-vectors.json, with the CLI's TS twin. ALREADY_ASKED already
@@ -203,8 +225,8 @@ while [ -z "$SUMMARY" ] && [ "$summary_tries" -lt 5 ]; do
     summary_tries=$((summary_tries + 1))
 done
 
-# Strip the marker from the body with the SAME pattern used to detect it.
-[ -n "$SUMMARY" ] && SUMMARY=$(printf '%s' "$SUMMARY" | sed -E "s/$MARKER_RE//g")
+# Strip the markers from the body with the SAME patterns used to detect them.
+[ -n "$SUMMARY" ] && SUMMARY=$(printf '%s' "$SUMMARY" | sed -E "s/$MARKER_RE//g; s/$EXIT_RE//g")
 
 # Match the original 0.4.0 behavior of passing the full assistant summary
 # through to `zeph notify`. The CLI itself decides what to do with long

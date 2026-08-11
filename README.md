@@ -5,6 +5,7 @@
 [![cli](https://img.shields.io/npm/v/@zeph-to/cli?label=%40zeph-to%2Fcli)](https://www.npmjs.com/package/@zeph-to/cli)
 [![mcp-server](https://img.shields.io/npm/v/@zeph-to/mcp-server?label=%40zeph-to%2Fmcp-server)](https://www.npmjs.com/package/@zeph-to/mcp-server)
 [![license](https://img.shields.io/github/license/zeph-to/plugin)](./LICENSE)
+[![docs](https://img.shields.io/badge/docs-docs.zeph.to-1f6feb)](https://docs.zeph.to)
 
 **Your agent finishes a build or hits a decision → your phone buzzes → you tap an answer → the session keeps going.** No walking back to the terminal.
 
@@ -16,6 +17,8 @@ Zeph turns any AI coding agent into something you can supervise from your pocket
 </p>
 
 Works with **Claude Code, Cursor, Windsurf, Gemini CLI, Codex, and more.** Built on [`@zeph-to/cli`](https://github.com/zeph-to/cli) (installer, hooks, tmux remote control) and [`@zeph-to/mcp-server`](https://github.com/zeph-to/mcp-server) (the `zeph_ask` family of tools), paired with the [Zeph app](https://zeph.to) on your phone.
+
+> **New here?** [docs.zeph.to](https://docs.zeph.to) walks the whole setup — one command on your machine, the app on your phone, and a restart. The reference below assumes that is already done.
 
 ---
 
@@ -252,9 +255,17 @@ Full CLI, SDK, and listener docs: [`@zeph-to/cli`](https://github.com/zeph-to/cl
 
 ## Encryption
 
-Push bodies are encrypted with AES-256-GCM; the wrapping key is derived via ECDH P-256 and synced across your own devices on first run. Toggle it in the app (Settings → Encryption); when off, pushes go plaintext. No config needed.
+End-to-end encryption is **off by default** and turning it on needs Zeph Pro. The switch is in the app under Settings → E2E Encryption; until you flip it every push reaches the backend in plaintext. No config beyond that.
 
-**Threat model, honestly:** keys are persisted on the Zeph backend to enable cross-device sync, so this is *device-shared* encryption — not true end-to-end. It protects push contents from passive network observers and from a leaked database snapshot taken without the key store, but **not** from the Zeph backend itself. A true E2E mode (per-device keypairs, no key escrow) is on the roadmap. Until then, treat push bodies as sensitive-but-not-secret.
+With it on, push bodies and attachments are encrypted with AES-256-GCM. Each machine holds its own ECDH P-256 keypair and the private half never leaves it — the backend stores public keys only and rejects a private-key upload. A push is encrypted once and its key wrapped separately for each of your devices.
+
+**Threat model, honestly.** Against a *passive* backend — a leaked snapshot, an operator reading the table — the stored ciphertext is useless, so push contents stay private. Three things it does not do:
+
+- **It does not stop an active operator.** Recipient public keys come from the same server, unsigned. A backend that injects a device record carrying its own key gets the message key wrapped for it. The Zeph app ships the counter-measure — compare device fingerprints, mark them verified, and strict mode then wraps only for verified devices — but it is off by default and the CLI and MCP server do not consult it (ADR-0007 Phase 4).
+- **There is no forward secrecy.** The shared secret for a given sender/device pair is static, so compromising either private key opens every past push wrapped for that pair.
+- **The ask loop is not encrypted.** `zeph_ask`, `zeph_prompt` and `zeph_input` travel over the hook route, which carries no sender key: the question's title and body are plaintext, and so is your answer. The server refuses an encrypted file on an answer outright rather than handing the agent bytes it cannot open. (A file the *agent* attaches to a question is the one exception — it carries its own wrapped key.)
+
+Your agent's machine is also **send-only** under encryption: it registers no public key and the listener does not decrypt, so nothing is encrypted *to* it.
 
 ---
 
