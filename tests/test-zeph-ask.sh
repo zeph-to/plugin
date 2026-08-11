@@ -54,10 +54,11 @@ assert_not() {
     fi
 }
 
-# ZEPH_HOOK_ID is set explicitly on every runner, never inherited. The hook
-# routes button-friendly questions to zeph_ask when a hook id exists, so a
-# developer with one exported in their own shell would otherwise see these
-# notify assertions fail on their machine and pass in CI.
+# Every runner pins the whole environment the hook reads — ZEPH_HOOK_ID, HOME,
+# TMUX — rather than inheriting any of it. Each one changes an assertion:
+# a hook id routes the question to zeph_ask instead of pushing, and HOME + TMUX
+# decide whether the body offers the phone's terminal mirror. Inherited, they
+# make these tests pass in CI and fail on the machine of anyone who runs zeph.
 run_hook() {
     local input="$1"
     local project_dir="${2:-/tmp/test-project}"
@@ -65,7 +66,7 @@ run_hook() {
     printf '%s' "$input" \
       | CLAUDE_PROJECT_DIR="$project_dir" PATH="$STUB_DIR:$PATH" \
         XDG_STATE_HOME="$WORK/state" XDG_CACHE_HOME="$WORK/cache" \
-        ZEPH_HOOK_ID="" \
+        ZEPH_HOOK_ID="" HOME="$WORK/no-listener-home" TMUX="" \
         bash "$HOOK_SCRIPT" 2>/dev/null
 }
 
@@ -79,7 +80,7 @@ run_hook_routed() {
     printf '%s' "$input" \
       | CLAUDE_PROJECT_DIR=/tmp/test-project PATH="$STUB_DIR:$PATH" \
         XDG_STATE_HOME="$state_dir" XDG_CACHE_HOME="$WORK/cache" \
-        ZEPH_HOOK_ID="hook_test_id" \
+        ZEPH_HOOK_ID="hook_test_id" HOME="$WORK/no-listener-home" TMUX="" \
         bash "$HOOK_SCRIPT" 2>/dev/null
 }
 

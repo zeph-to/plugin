@@ -74,17 +74,20 @@ if [ "$(zeph_ask_decide "$HOOKID_PRESENT" 0 "$HAS_PREVIEW" "$QUESTION_CHARS" "$O
     # Deliberately NOT trimmed: trim_chars below exists for the device feed
     # preview, and the model has to re-ask this question verbatim.
     #
-    # No `$ZEPH_CMD` on this path, and no other network call. Claude Code's
-    # behaviour when a hook times out is undocumented — if it fails open, a
-    # hook that hangs here would let the picker through while the user believes
-    # it was routed; if it fails closed, the picker is blocked with no reason
-    # attached and the model has nothing to act on. Neither can happen if the
-    # path cannot block.
+    # No `$ZEPH_CMD` on this path, and no other network call. Claude Code fails
+    # OPEN when it kills a hook at its timeout (measured 2026-08-11), so a hook
+    # that hung here would let the picker through while the user believed the
+    # question had been routed. Here that is the safe direction anyway — but it
+    # only stays safe because nothing on this path can block.
+    #
+    # Known gap: the user gets no push from THIS hook on a deny. Normally that
+    # is right — the model's `zeph_ask` sends its own, and a second push would
+    # duplicate the question. If the model ignores the reason and simply stops,
+    # the end-of-turn Stop hook is the remaining signal, which is quieter than
+    # the one-way notify this path used to send.
     OPTION_LINE=""
     [ -n "$OPTIONS" ] && OPTION_LINE=" Options: $OPTIONS."
-    jq -n --arg reason "Do not use AskUserQuestion here. Ask this exact question again with the zeph_ask tool so the user can answer it from their phone: \"$QUESTION\".$OPTION_LINE Map each option to a zeph_ask action and use the response in place of the picker." \
-        '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $reason}}' \
-        2>/dev/null
+    zeph_hook_decision deny "Do not use AskUserQuestion here. Ask this exact question again with the zeph_ask tool so the user can answer it from their phone: \"$QUESTION\".$OPTION_LINE Map each option to a zeph_ask action and use the response in place of the picker."
     exit 0
 fi
 

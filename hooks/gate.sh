@@ -119,6 +119,21 @@ zeph_ask_decide() {
     echo deny
 }
 
+# zeph_hook_decision <allow|deny> <reason> — emit a PreToolUse decision.
+#
+# One definition of the envelope. It was written out by hand in three places
+# (the ask hook's deny, and both branches of the approval hook), so the field
+# names lived in three places too and a fourth field would have had to be added
+# to all of them without drifting.
+#
+# `jq -n --arg` does the escaping: a reason carries a user's question verbatim,
+# quotes, newlines and all.
+zeph_hook_decision() {
+    jq -n --arg decision "$1" --arg reason "$2" \
+        '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: $decision, permissionDecisionReason: $reason}}' \
+        2>/dev/null
+}
+
 # ── Per-project state + CLI bounding (shared by both hooks) ──────────────────
 
 # Mute/push-mode/auto state lives under a per-user dir. It used to sit at
@@ -204,37 +219,45 @@ zeph_approve_needed() {
     local cmd="$1"
     [ -n "$cmd" ] || return 1
 
+    # Builtin pre-filter. This runs on EVERY Bash tool call, and without it an
+    # ordinary `ls` pays for the whole grep chain below — a dozen forks to
+    # conclude nothing matches. Every pattern further down contains one of these
+    # keywords, so anything reaching the greps is at least plausible.
+    # Written as character classes rather than `shopt -s nocasematch` because
+    # gate.sh is SOURCED into the hooks: flipping a shell option here would
+    # change matching for the rest of the calling script. Character classes are
+    # also bash 3.2 safe (macOS /bin/bash), which `${cmd,,}` is not.
+    case "$cmd" in
+        *[Rr][Mm]*|*[Gg][Ii][Tt]*|*[Dd][Ee][Pp][Ll][Oo][Yy]*|*[Tt][Ee][Rr][Rr][Aa][Ff][Oo][Rr][Mm]*) ;;
+        *[Dd][Rr][Oo][Pp]*|*[Tt][Rr][Uu][Nn][Cc][Aa][Tt][Ee]*|*[Dd][Ee][Ll][Ee][Tt][Ee]*|*[Ff][Ll][Uu][Ss][Hh]*) ;;
+        *) return 1 ;;
+    esac
+
     # 1. rm carrying BOTH recursive and force, however they are spelled.
     #    Collapsing every short flag into one string is what makes `-rf`,
     #    `-fr` and `-r -f` the same question instead of three patterns.
-    if printf '%s' "$cmd" | grep -Eqi '(^|[^[:alnum:]_./-])rm[[:space:]]'; then
+    if grep -Eqi '(^|[^[:alnum:]_./-])rm[[:space:]]' <<< "$cmd"; then
         local flags
-        flags=$(printf '%s' "$cmd" \
-            | sed -e 's/--recursive/-r/g' -e 's/--force/-f/g' \
+        flags=$(sed -e 's/--recursive/-r/g' -e 's/--force/-f/g' <<< "$cmd" \
             | grep -Eo -- '(^|[[:space:]])-[[:alnum:]]+' \
             | tr -d ' -\n' | tr 'A-Z' 'a-z')
-        case "$flags" in
-            *r*) case "$flags" in *f*) return 0 ;; esac ;;
-        esac
+        case "$flags" in *r*f*|*f*r*) return 0 ;; esac
     fi
 
     # 2. Git operations that discard work or rewrite a published history.
-    printf '%s' "$cmd" | grep -Eqi 'git[[:space:]]+push[[:space:]].*(--force|--force-with-lease|(^|[[:space:]])-f([[:space:]]|$))' && return 0
-    printf '%s' "$cmd" | grep -Eqi 'git[[:space:]]+push[[:space:]]+-f([[:space:]]|$)' && return 0
-    printf '%s' "$cmd" | grep -Eqi 'git[[:space:]]+reset[[:space:]]+--hard' && return 0
-    printf '%s' "$cmd" | grep -Eqi 'git[[:space:]]+clean[[:space:]]+-[[:alnum:]]*[fd]' && return 0
+    #    The second push alternative is NOT redundant with the first: `^` anchors
+    #    to the start of the whole string, so once `push[[:space:]]` has eaten the
+    #    only space, `-f`'s own `(^|[[:space:]])` branch has nothing left to match
+    #    and bare `git push -f` slips through. Removing it fails a vector.
+    grep -Eqi 'git[[:space:]]+push[[:space:]].*(--force|--force-with-lease|(^|[[:space:]])-f([[:space:]]|$))|git[[:space:]]+push[[:space:]]+-f([[:space:]]|$)|git[[:space:]]+reset[[:space:]]+--hard|git[[:space:]]+clean[[:space:]]+-[[:alnum:]]*[fd]' <<< "$cmd" && return 0
 
-    # 3. Anything that reaches deployed infrastructure.
-    printf '%s' "$cmd" | grep -Eqi '(^|[^[:alnum:]_-])(cdk|serverless|sls)[[:space:]]+deploy' && return 0
-    printf '%s' "$cmd" | grep -Eqi '(^|[^[:alnum:]_-])terraform[[:space:]]+(apply|destroy)' && return 0
-    # A package script whose NAME says deploy — `yarn server:deploy:prod`. Kept
-    # to the runner prefix so `grep -rn deploy src/` is not a deploy.
-    printf '%s' "$cmd" | grep -Eqi '(^|[^[:alnum:]_-])(npm[[:space:]]+run|yarn|pnpm[[:space:]]+run|bun[[:space:]]+run)[[:space:]]+[[:alnum:]:_-]*deploy' && return 0
+    # 3. Anything that reaches deployed infrastructure. The last alternative is a
+    #    package script whose NAME says deploy (`yarn server:deploy:prod`), kept
+    #    behind a runner prefix so `grep -rn deploy src/` is not a deploy.
+    grep -Eqi '(^|[^[:alnum:]_-])(cdk|serverless|sls)[[:space:]]+deploy|(^|[^[:alnum:]_-])terraform[[:space:]]+(apply|destroy)|(^|[^[:alnum:]_-])(npm[[:space:]]+run|yarn|pnpm[[:space:]]+run|bun[[:space:]]+run)[[:space:]]+[[:alnum:]:_-]*deploy' <<< "$cmd" && return 0
 
     # 4. Statements that drop data rather than change it.
-    printf '%s' "$cmd" | grep -Eqi 'drop[[:space:]]+(table|database|schema)' && return 0
-    printf '%s' "$cmd" | grep -Eqi 'truncate[[:space:]]+table' && return 0
-    printf '%s' "$cmd" | grep -Eqi 'delete-table|flushall|flushdb' && return 0
+    grep -Eqi 'drop[[:space:]]+(table|database|schema)|truncate[[:space:]]+table|delete-table|flushall|flushdb' <<< "$cmd" && return 0
 
     return 1
 }
@@ -301,7 +324,7 @@ zeph_ask_replay_mark() {
     now=$(zeph_ask_now)
     for file in "$ZEPH_STATE_DIR"/askdeny-*; do
         [ -f "$file" ] || continue
-        stamp=$(cat "$file" 2>/dev/null)
+        read -r stamp < "$file" 2>/dev/null || stamp=""
         case "$stamp" in
             ''|*[!0-9]*) rm -f "$file" 2>/dev/null; continue ;;
         esac
@@ -310,15 +333,24 @@ zeph_ask_replay_mark() {
     printf '%s\n' "$now" > "$ZEPH_STATE_DIR/askdeny-$1" 2>/dev/null || true
 }
 
-# zeph_wrap_timeout <cmd> — bound a CLI invocation below the 10s hooks.json
-# cap, so a cold `npx -y` resolve or a hung network can't eat the whole hook
-# budget. macOS ships no `timeout` in the base system (gtimeout comes from
-# coreutils); with neither present the hooks.json cap is the only bound.
+# zeph_wrap_timeout <cmd> [seconds] — bound a CLI invocation below the calling
+# hook's cap in plugin.json, so a cold `npx -y` resolve or a hung network can't
+# eat the whole hook budget. macOS ships no `timeout` in the base system
+# (gtimeout comes from coreutils); with neither present the plugin.json cap is
+# the only bound.
+#
+# The bound is a parameter because the two callers have very different budgets:
+# the ask hook has 10s and wants 8, while the approval hook deliberately waits
+# on a human for over a minute. A single hardcoded 8 would have made the
+# approval gate unwrappable — and an unwrapped CLI call there is not a slow
+# hook, it is a SILENT ALLOW of the exact commands the gate exists to hold,
+# because Claude Code fails open when it kills a hook.
 zeph_wrap_timeout() {
+    local seconds="${2:-8}"
     if command -v timeout >/dev/null 2>&1; then
-        echo "timeout 8 $1"
+        echo "timeout $seconds $1"
     elif command -v gtimeout >/dev/null 2>&1; then
-        echo "gtimeout 8 $1"
+        echo "gtimeout $seconds $1"
     else
         echo "$1"
     fi

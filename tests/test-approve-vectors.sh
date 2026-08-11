@@ -47,6 +47,23 @@ while IFS=$'\t' read -r name expected command; do
 done < <(jq -r '.[] | [ .name, .expect, ("\u0001" + .command) ] | @tsv' "$VECTORS")
 
 echo
+echo "[zeph_wrap_timeout — the approval gate needs a bound of its own]"
+# The approval hook waits over a minute for a human, so the 8s default that
+# suits the ask hook would kill it. An UNBOUNDED call is the real danger: Claude
+# Code fails open on a killed hook, so a slow `npx` resolve would turn the gate
+# into a silent allow of exactly the commands it exists to hold.
+if command -v timeout >/dev/null 2>&1 || command -v gtimeout >/dev/null 2>&1; then
+    record "defaults to 8s for the ask hook" "8" \
+        "$(zeph_wrap_timeout 'zeph notify' | awk '{print $2}')"
+    record "honours an explicit longer bound" "100" \
+        "$(zeph_wrap_timeout 'zeph ask' 100 | awk '{print $2}')"
+    record "keeps the command after the bound" "zeph ask" \
+        "$(zeph_wrap_timeout 'zeph ask' 100 | cut -d' ' -f3-)"
+else
+    echo "  – skipped: neither timeout nor gtimeout on PATH"
+fi
+
+echo
 echo "=========================================="
 echo "Total: $TOTAL  |  Passed: $PASS  |  Failed: $FAIL"
 echo "=========================================="
