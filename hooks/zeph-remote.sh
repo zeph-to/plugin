@@ -39,9 +39,8 @@ zeph_state_present muted "$HASH" >/dev/null && exit 0
 
 # Drain stdin unconditionally. This hook can now emit on a turn where nothing
 # about the prompt matters, and returning while the pipe is still full leaves
-# the writer to take a SIGPIPE.
+# the writer to take a SIGPIPE. Parsing it is a different question — see below.
 INPUT=$(cat)
-PROMPT=$(printf '%s' "$INPUT" | jq -r '.prompt // empty' 2>/dev/null)
 
 hash_stdin() {
     if command -v shasum >/dev/null 2>&1; then
@@ -58,8 +57,15 @@ hash_stdin() {
 # that simply isn't the injected one can still match on a later turn.
 remote_origin_match() {
     local marker ts recorded ws prompt digest
-    [ -n "$PROMPT" ] || return 1
+
+    # Marker existence first, and it is a plain file test. Every prompt in every
+    # project reaches this line, and the overwhelmingly common answer is "no
+    # marker" — so nothing below may run before it, least of all the `jq` spawn
+    # that parses the prompt out of the payload.
     marker=$(zeph_state_present remote "$HASH") || return 1
+
+    prompt=$(printf '%s' "$INPUT" | jq -r '.prompt // empty' 2>/dev/null)
+    [ -n "$prompt" ] || return 1
 
     # Marker format: "<epochSec> <sha256hex>\n" (written by cli listener.ts).
     read -r ts recorded < "$marker" 2>/dev/null || return 1
@@ -84,7 +90,7 @@ remote_origin_match() {
     # etc.) and the listener hashes with the same explicit ASCII-only trim —
     # both sides must strip the exact same bytes or the digests diverge.
     ws=$' \t\r\n\f\v'
-    prompt="${PROMPT#"${PROMPT%%[!${ws}]*}"}"
+    prompt="${prompt#"${prompt%%[!${ws}]*}"}"
     prompt="${prompt%"${prompt##*[!${ws}]}"}"
 
     digest=$(printf '%s' "$prompt" | hash_stdin) || return 1
