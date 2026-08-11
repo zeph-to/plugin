@@ -69,8 +69,9 @@ zeph_gate_decide() {
 # twin is cli/src/gate.ts findStateFile — keep them behaviorally in sync.
 ZEPH_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/zeph"
 
-# zeph_state_present <kind> <hash> — kind is muted|pushmode|auto. Echoes the
-# live state-file path, rc 1 if none.
+# zeph_state_present <kind> <hash> — kind is muted|pushmode|auto|remote. Echoes
+# the live state-file path, rc 1 if none. (`remote` is the one-shot phone-origin
+# marker the listener writes and zeph-remote.sh consumes — see ADR-0002.)
 #
 # `pushmode` alone has a machine-wide default (`pushmode-default`, written by
 # `/zeph-quiet --global`), consulted last so a per-project dial always wins.
