@@ -59,6 +59,66 @@ zeph_gate_decide() {
     echo "push $priority"
 }
 
+# ── AskUserQuestion routing (zeph-ask.sh) ────────────────────────────────────
+#
+# CORE_RULES rules 10/11 say a button-friendly question must go through
+# `zeph_ask` rather than the local AskUserQuestion picker, and carve out two
+# cases where the picker is still right: the answer needs code or logs that
+# won't fit a push body (a), or the answer is plausibly multi-paragraph (b).
+# Until now that rule lived only in prose, so breaking it failed silently.
+# This function is the machine reading of it: `deny` means the PreToolUse hook
+# blocks the picker and hands the model the same question to re-ask through
+# `zeph_ask`, `allow` means the picker opens as before.
+#
+# zeph_ask_decide <hookid_present> <muted> <has_preview> <question_chars> <option_chars> <replay>
+#   hookid_present — 1 when ZEPH_HOOK_ID is set (two-way tools exist)
+#   muted          — 1 when this project is muted
+#   has_preview    — 1 when any option carries a `preview` block
+#   question_chars — length of the question stem
+#   option_chars   — longest label+description across the options
+#   replay         — 1 when this exact question was denied moments ago
+# Prints exactly one of: "deny" | "allow".
+#
+# ALLOW IS THE SAFE DIRECTION and every uncertain input must reach it. A wrong
+# `allow` costs the user one trip to the terminal; a wrong `deny` can leave a
+# session with no way to ask anything at all. Hence: no hook id → allow (there
+# are no two-way tools to route to), muted → allow (routing to `zeph_ask` would
+# push around the mute the user set), unparseable numbers → 0 → allow via the
+# hookid check.
+#
+# `replay` outranks everything. If the model cannot reach `zeph_ask` — MCP
+# server down, tool not exposed — it will retry AskUserQuestion, and a second
+# deny would trap the session. The retry gets through instead.
+#
+# The two limits are the carve-outs made countable. They are deliberately
+# generous: the question is whether the text still fits a phone notification,
+# not whether it is short.
+ZEPH_ASK_MAX_QUESTION_CHARS=400
+ZEPH_ASK_MAX_OPTION_CHARS=240
+
+zeph_ask_decide() {
+    local hookid="${1:-0}" muted="${2:-0}" has_preview="${3:-0}"
+    local question_chars="${4:-0}" option_chars="${5:-0}" replay="${6:-0}"
+
+    [ "$replay" = 1 ]      && { echo allow; return 0; }
+    [ "$hookid" != 1 ]     && { echo allow; return 0; }
+    [ "$muted" = 1 ]       && { echo allow; return 0; }
+    [ "$has_preview" = 1 ] && { echo allow; return 0; }
+
+    # Anything non-numeric means the measurement failed, and a failed
+    # measurement must not become a deny: `[ x -gt 400 ]` errors, the `&&`
+    # below never fires, and control would fall through to deny — the one
+    # direction this function is not allowed to guess in.
+    case "$question_chars$option_chars" in
+        ''|*[!0-9]*) echo allow; return 0 ;;
+    esac
+
+    [ "$question_chars" -gt "$ZEPH_ASK_MAX_QUESTION_CHARS" ] && { echo allow; return 0; }
+    [ "$option_chars" -gt "$ZEPH_ASK_MAX_OPTION_CHARS" ] && { echo allow; return 0; }
+
+    echo deny
+}
+
 # ── Per-project state + CLI bounding (shared by both hooks) ──────────────────
 
 # Mute/push-mode/auto state lives under a per-user dir. It used to sit at
@@ -118,6 +178,77 @@ zeph_read_pushmode() {
         quiet|loud|normal) echo "$mode" ;;
         *)                 echo normal ;;
     esac
+}
+
+# ── AskUserQuestion replay markers ───────────────────────────────────────────
+#
+# A deny is only safe if the same question can get through on its next try —
+# see `replay` in zeph_ask_decide. These two record and read that fact.
+#
+# The key must be the whole tool_input, not the question stem: "Proceed?" and
+# "Continue?" recur constantly within one session, so hashing the stem would
+# make unrelated questions collide and silently allow the second one.
+#
+# The window separates a retry from a legitimate repeat. A model that cannot
+# reach `zeph_ask` retries within seconds; a user genuinely being asked the same
+# thing again is minutes away. 60 seconds sits between the two.
+#
+# The timestamp lives in the file's CONTENTS rather than its mtime: `stat` takes
+# different flags on macOS and GNU, and `find -newermt` isn't portable either.
+# Reading an integer we wrote ourselves works the same everywhere.
+ZEPH_ASK_REPLAY_WINDOW_SEC=60
+
+# zeph_ask_now — epoch seconds. Bash 5 has it as a builtin; older bash (macOS
+# ships 3.2 as /bin/bash) falls back to the `date` binary.
+zeph_ask_now() {
+    if [ -n "${EPOCHSECONDS:-}" ]; then
+        echo "$EPOCHSECONDS"
+    else
+        date +%s
+    fi
+}
+
+# zeph_ask_replay_seen <key> — rc 0 when this question was denied recently.
+#
+# `key` is project-scoped by the caller, matching how every other state file
+# here is keyed (`muted-<project>`, `pushmode-<project>`). Keying on the
+# question alone would let a deny in one project allow the identical question
+# in another — two sessions asking "Proceed?" within the window is ordinary.
+zeph_ask_replay_seen() {
+    local file="$ZEPH_STATE_DIR/askdeny-$1" stamp now
+    stamp=$(cat "$file" 2>/dev/null) || return 1
+    case "$stamp" in
+        ''|*[!0-9]*) return 1 ;;
+    esac
+    now=$(zeph_ask_now)
+    [ $((now - stamp)) -lt "$ZEPH_ASK_REPLAY_WINDOW_SEC" ] 2>/dev/null
+}
+
+# zeph_ask_replay_mark <key> — record that this question was just denied, and
+# drop markers that have aged out.
+#
+# The sweep matters: every denied question leaves a file, and a marker is dead
+# to `zeph_ask_replay_seen` the moment its window closes. Without it the state
+# dir accretes one file per question forever. It runs here rather than on a
+# timer because this is the only place that creates them, and the expiry test
+# is the same integer compare — no `stat`, no `find -newermt`.
+#
+# Best-effort throughout: a state dir we cannot write means the next retry is
+# denied too, which would trap that one session. That is worth neither failing
+# the hook nor blocking on.
+zeph_ask_replay_mark() {
+    mkdir -p "$ZEPH_STATE_DIR" 2>/dev/null || return 0
+    local now file stamp
+    now=$(zeph_ask_now)
+    for file in "$ZEPH_STATE_DIR"/askdeny-*; do
+        [ -f "$file" ] || continue
+        stamp=$(cat "$file" 2>/dev/null)
+        case "$stamp" in
+            ''|*[!0-9]*) rm -f "$file" 2>/dev/null; continue ;;
+        esac
+        [ $((now - stamp)) -ge "$ZEPH_ASK_REPLAY_WINDOW_SEC" ] && rm -f "$file" 2>/dev/null
+    done
+    printf '%s\n' "$now" > "$ZEPH_STATE_DIR/askdeny-$1" 2>/dev/null || true
 }
 
 # zeph_wrap_timeout <cmd> — bound a CLI invocation below the 10s hooks.json

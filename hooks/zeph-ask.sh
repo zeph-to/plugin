@@ -28,6 +28,66 @@ QUESTION=$(printf '%s' "$INPUT" | jq -r '.tool_input.question // .tool_input.que
 # drive the picker directly (see mirror_available below).
 OPTIONS=$(printf '%s' "$INPUT" | jq -r '[.tool_input.questions[0].options[]?.label // empty] | join(" · ")' 2>/dev/null)
 
+# ── Route the question, or let the picker open ───────────────────────────────
+#
+# CORE_RULES rules 10/11 already say a button-friendly question belongs in
+# `zeph_ask`. Enforcing that here closes the path where ignoring the rule
+# succeeds quietly and strands whoever is holding a phone. `zeph_ask_decide`
+# (hooks/gate.sh) owns the judgment; this block only measures the inputs.
+#
+# Honest about how far this goes: the BLOCK is deterministic, the RECOVERY is
+# not. Nothing here can make the model call `zeph_ask` — it can only make the
+# wrong path fail loudly instead of silently, and hand over the text needed to
+# do the right thing.
+
+# Falls back to a NON-NUMERIC sentinel, not 0. A jq failure means the input
+# could not be measured, and zeph_ask_decide reads anything non-numeric as
+# "don't guess, allow". Falling back to 0 would instead look like a genuinely
+# short question and route it — turning unparseable input into a deny.
+ask_measure() { printf '%s' "$INPUT" | jq -r "$1" 2>/dev/null || echo unmeasurable; }
+
+HAS_PREVIEW=$(ask_measure '[.tool_input.questions[]?.options[]?.preview // empty] | if length > 0 then 1 else 0 end')
+QUESTION_CHARS=$(ask_measure '(.tool_input.question // .tool_input.questions[0].question // "") | length')
+# Longest label+description across every option: `description` is where long
+# content actually lands, so measuring labels alone would miss the carve-out.
+OPTION_CHARS=$(ask_measure '[.tool_input.questions[]?.options[]? | ((.label // "") + (.description // "")) | length] | max // 0')
+
+# Keyed on the whole tool_input, not the question stem: "Proceed?" recurs
+# constantly in one session and would collide with unrelated questions.
+ASK_HASH=$(printf '%s' "$INPUT" | jq -cS '.tool_input' 2>/dev/null | cksum | tr -d ' ')
+[ -n "$ASK_HASH" ] || ASK_HASH=none
+# Project-scoped, like every other state file (`muted-<project>`): the same
+# question in two projects within the window is ordinary, and one project's
+# deny must not let the other's picker through.
+ASK_KEY="${MUTE_HASH}-${ASK_HASH}"
+
+HOOKID_PRESENT=0
+[ -n "${ZEPH_HOOK_ID:-}" ] && HOOKID_PRESENT=1
+REPLAY=0
+zeph_ask_replay_seen "$ASK_KEY" && REPLAY=1
+
+# muted is passed as 0 because a muted project already left this script at the
+# `zeph_state_present muted` check above. The parameter stays in the function's
+# signature so the decision reads completely on its own in the vectors.
+if [ "$(zeph_ask_decide "$HOOKID_PRESENT" 0 "$HAS_PREVIEW" "$QUESTION_CHARS" "$OPTION_CHARS" "$REPLAY")" = deny ]; then
+    zeph_ask_replay_mark "$ASK_KEY"
+    # Deliberately NOT trimmed: trim_chars below exists for the device feed
+    # preview, and the model has to re-ask this question verbatim.
+    #
+    # No `$ZEPH_CMD` on this path, and no other network call. Claude Code's
+    # behaviour when a hook times out is undocumented — if it fails open, a
+    # hook that hangs here would let the picker through while the user believes
+    # it was routed; if it fails closed, the picker is blocked with no reason
+    # attached and the model has nothing to act on. Neither can happen if the
+    # path cannot block.
+    OPTION_LINE=""
+    [ -n "$OPTIONS" ] && OPTION_LINE=" Options: $OPTIONS."
+    jq -n --arg reason "Do not use AskUserQuestion here. Ask this exact question again with the zeph_ask tool so the user can answer it from their phone: \"$QUESTION\".$OPTION_LINE Map each option to a zeph_ask action and use the response in place of the picker." \
+        '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $reason}}' \
+        2>/dev/null
+    exit 0
+fi
+
 # UTF-8 safe trim to ~200 chars so multibyte characters (e.g. Korean) don't
 # get sliced in the middle and turned into mojibake. Falls back to byte-wise
 # `head -c` only when python3 is unavailable.
