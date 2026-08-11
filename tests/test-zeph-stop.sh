@@ -374,6 +374,39 @@ run_hook "$FIXTURES/main-2-tools.jsonl"
 assert "muted-default does not silence an unmuted project" zeph_called
 rm -f "$WORK/state/zeph/muted-default"
 
+echo
+echo "[exit marker clears sticky REMOTE — including on the silent quiet path]"
+# The free-text exit is the one signal the server cannot see, so the model
+# marks it and this hook acts on it. It has to work on a stock quiet install,
+# where the gate returns silent and everything after it never runs.
+remote_state_file() { printf '%s/state/zeph/remote-active-%s' "$WORK" "$(printf '%s' "${1:-/tmp}" | cksum | cut -d' ' -f1)"; }
+clear_pushmode
+mkdir -p "$WORK/state/zeph"
+date +%s > "$(remote_state_file)"
+run_hook "$FIXTURES/main-marker-exit.jsonl"
+assert "no push on the quiet default"  zeph_silent
+assert "REMOTE state cleared anyway"   [ ! -f "$(remote_state_file)" ]
+
+echo
+echo "[exit marker never leaks into the push body]"
+set_pushmode loud
+date +%s > "$(remote_state_file)"
+run_hook "$FIXTURES/main-marker-exit.jsonl"
+assert     "pushes (loud)"                zeph_called
+assert     "body keeps the real summary"  zeph_body_has "Cleaned up the scratch files."
+assert_not "body does not carry the raw marker"  zeph_body_has "zeph: exit"
+assert     "REMOTE state cleared"         [ ! -f "$(remote_state_file)" ]
+clear_pushmode
+
+echo
+echo "[no exit marker leaves sticky REMOTE alone]"
+set_pushmode loud
+date +%s > "$(remote_state_file)"
+run_hook "$FIXTURES/main-2-tools.jsonl"
+assert "REMOTE state untouched"  [ -f "$(remote_state_file)" ]
+rm -f "$(remote_state_file)"
+clear_pushmode
+
 # ── summary ────────────────────────────────────────────────────────────────
 
 echo

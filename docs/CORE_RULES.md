@@ -186,6 +186,8 @@ The only way to leave REMOTE is the user signalling exit (per the **(b)** list a
 
 The moment the user picks an action id matching `done`/`stop`/`exit` (case-insensitive), types free-text that clearly ends the session, or the zeph_ask times out and falls back to a Done-like id, you flip to NORMAL. Don't send `zeph_ask` on the response that processes the exit signal.
 
+**On the free-text exit, say so in the response: emit `<!-- zeph: exit -->` once.** The other two exits are visible to the server, which reports them back as `zephState: "NORMAL"` in the `zeph_ask` result. Free text is the one it cannot judge — "thanks, that's it" is a meaning call, and it is yours. Where a Zeph Stop hook is installed, that marker is what actually ends the remote session; it is stripped from the push body, and it is separate from the Push Signal markers (`skip`/`push`/`high`), which steer notifications and say nothing about the mode.
+
 ### When to use AskUserQuestion vs zeph_ask
 
 10. **Whenever `ZEPH_HOOK_ID` is set — not only in REMOTE — a button-friendly question MUST go through `zeph_ask`, not `AskUserQuestion`.** "Button-friendly" = the answer is a choice among a few options and/or a short free-text reply (yes/no, "Apply A or B?", "which naming rule?", "proceed?"). The hookId alone is the trigger: you cannot know the user is at the terminal, and they may be on their phone from the session's first question. `AskUserQuestion` is a LOCAL blocking picker — the Zeph hook can only mirror it as a one-way "answer at the terminal" notification, never round-trip the answer.

@@ -168,6 +168,13 @@ zeph_remote_touch() {
     date +%s > "$(zeph_remote_state_file "$1")" 2>/dev/null || return 0
 }
 
+# zeph_remote_clear <hash> — leave REMOTE. Always rc 0, and an absent file is
+# success: the callers are hooks that have their own job to finish.
+zeph_remote_clear() {
+    rm -f "$(zeph_remote_state_file "$1")" 2>/dev/null
+    return 0
+}
+
 # zeph_wrap_timeout <cmd> — bound a CLI invocation below the 10s hooks.json
 # cap, so a cold `npx -y` resolve or a hung network can't eat the whole hook
 # budget. macOS ships no `timeout` in the base system (gtimeout comes from
