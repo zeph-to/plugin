@@ -178,7 +178,8 @@ mkdir -p "$WORK/state/zeph"
 printf 'not-a-timestamp junk\n' > "$(marker_path "$P")"
 OUT=$(run_hook "whatever" "$P" "hook_123")
 RC=$?
-assert "no output"  [ -z "$OUT" ]
+assert "no output"        [ -z "$OUT" ]
+assert "marker deleted"   [ ! -f "$(marker_path "$P")" ]
 assert "exit 0"     [ "$RC" -eq 0 ]
 
 echo

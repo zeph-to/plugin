@@ -86,10 +86,12 @@ remote_origin_match() {
 
     # Marker format: "<epochSec> <sha256hex>\n" (written by cli listener.ts).
     # Junk here can never match anything, so it says nothing about who typed —
-    # same verdict as no marker at all.
-    read -r ts recorded < "$marker" 2>/dev/null || return 1
-    case "$ts" in '' | *[!0-9]*) return 1 ;; esac
-    [ -n "$recorded" ] || return 1
+    # same verdict as no marker at all, and the same housekeeping a stale
+    # marker gets: delete it rather than leave a file that can only ever be
+    # re-read and re-rejected.
+    read -r ts recorded < "$marker" 2>/dev/null || { rm -f "$marker"; return 1; }
+    case "$ts" in '' | *[!0-9]*) rm -f "$marker"; return 1 ;; esac
+    [ -n "$recorded" ] || { rm -f "$marker"; return 1; }
 
     # Freshness: 15 minutes. The window is deliberately generous — false
     # positives are already impossible without an exact hash match; its only
