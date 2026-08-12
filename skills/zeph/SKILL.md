@@ -147,10 +147,10 @@ The response is a direct user instruction — execute it immediately without re-
 The Ask Loop has two states, and you are told which one you are in — the mode is kept in a file, so it outlives compaction:
 
 - **`zeph_ask` results carry `zephState`** (`"REMOTE"` / `"NORMAL"`). The server applies the transition: any answer but a Done-like action id enters REMOTE, a Done-like id exits, and so does a timeout that fell back to one. No `zephState` means a timeout onto a safe fallback, which changed nothing.
-- **Prompt-submit hooks say it where installed** — the remote-origin note on the turn a phone message lands, then a one-line reminder every later turn the session is still remote (including terminal-typed turns).
+- **Prompt-submit hooks say it where installed** — the remote-origin note on the turn a phone message lands, then a note that the session has LEFT REMOTE on the first prompt the user types at the terminal (a prompt with no phone marker came from their keyboard; phone answers arrive as `tool_result` and never reach a prompt hook).
 - **Neither → NORMAL.**
 
-**REMOTE (sticky, `zeph_ask` MANDATORY)**: end EVERY response with `zeph_ask` — independent of input source (the user may switch between phone and terminal mid-session) and independent of whether the work was substantial or routine. The only way to leave REMOTE is the user exiting explicitly.
+**REMOTE (sticky, `zeph_ask` MANDATORY)**: end EVERY response with `zeph_ask`, independent of whether the work was substantial or routine. It ends when the user exits (button or free text), when they type a prompt at the terminal, or when the state expires after a crash.
 
 **NORMAL**: apply Rule 4 (CORE_RULES.md) — substantial work → `zeph_ask`, routine work → skip and let the Stop hook fire.
 

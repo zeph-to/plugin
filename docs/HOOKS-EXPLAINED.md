@@ -234,7 +234,7 @@ ls "${XDG_STATE_HOME:-$HOME/.local/state}/zeph/muted-$HASH"
 
 ## Remote-Origin Hook (zeph-remote.sh)
 
-**What it does (ADR-0002):** two jobs — entering REMOTE, and staying there.
+**What it does (ADR-0002):** two jobs — entering REMOTE, and leaving it.
 
 *Entry:*
 - Fires on every prompt submit, and enters REMOTE only when the prompt matches
@@ -249,13 +249,20 @@ ls "${XDG_STATE_HOME:-$HOME/.local/state}/zeph/muted-$HASH"
   Stop-hook push self-contained and mention `npx @zeph-to/cli setup` once. No
   state is recorded: without `zeph_ask` there is no mode to stay in
 
-*Staying there:*
-- The marker is one-shot, but REMOTE is not. A user who answers from the phone
-  and then types at the terminal produces turns with no marker and no
-  `zeph_ask` result — the mode used to run out of evidence exactly there
-- So every later prompt re-reads the state file and re-states the mode in one
-  sentence. Living in a file is also what makes it survive context compaction,
-  which is what Rule 13 promises
+*Leaving:*
+- The marker is one-shot, but REMOTE is not — it lives in the state file below,
+  which is also what makes it survive context compaction (Rule 13)
+- A prompt that reaches this hook without a marker was typed at the terminal:
+  the only way text becomes a prompt without one is the user's own keyboard,
+  since a phone answer to a `zeph_ask` comes back as a `tool_result` and never
+  reaches a prompt hook. So the hook clears the state and says once that the
+  session has left REMOTE; later terminal turns then cost nothing
+- Exception: a *fresh* marker the prompt failed to match means a phone message
+  is still in flight (queued behind a long turn, or a digest the two sides
+  compute differently). The evidence is ambiguous, so the hook says nothing and
+  leaves the mode alone rather than stranding a user who is still on the phone.
+  A stale or unparseable marker can never match and reads as a terminal turn
+- Re-entry is one phone message: the next injection writes a fresh marker
 - Mute still outranks both jobs, and neither ever blocks a prompt (always
   exit 0, including on state-file IO failure)
 
@@ -266,18 +273,22 @@ ${XDG_STATE_HOME:-$HOME/.local/state}/zeph/remote-<hash>
 content: "<epochSeconds> <sha256hex-of-trimmed-text>\n"
 ```
 
-**State file** — the mode itself, written and read here (`gate.sh`
-`zeph_remote_active` / `zeph_remote_touch`; TS twin `cli/src/gate.ts`):
+**State file** — the mode itself, written, read and cleared here (`gate.sh`
+`zeph_remote_active` / `zeph_remote_touch` / `zeph_remote_clear`; TS twin
+`cli/src/gate.ts`):
 
 ```
 ${XDG_STATE_HOME:-$HOME/.local/state}/zeph/remote-active-<hash>
 content: "<epochSeconds it was last confirmed>\n"
 ```
 
-It expires 4 hours after its last refresh, and every phone prompt or answered
-`zeph_ask` refreshes it. The TTL is the only thing that ends a session nobody
-exited: there is no SessionEnd hook, so without it a crash would leave REMOTE
-latched and later sessions in this project would keep asking an absent phone.
+Every phone prompt or answered `zeph_ask` refreshes it, and it expires 4 hours
+after that last refresh. The TTL is the backstop, not the usual exit — a
+terminal-typed prompt, a Done-like answer and the model's `<!-- zeph: exit -->`
+all delete the file outright. What none of them covers is a session that
+crashed: there is no SessionEnd hook, so without the TTL a Ctrl-C would leave
+REMOTE latched and later sessions in this project would keep asking an absent
+phone.
 
 **Example flow:**
 
@@ -295,9 +306,14 @@ Claude does the work, ends the response with zeph_ask
   ↓
 User answers with a button tap — the loop continues from the phone
   ↓
-...later the user types at the terminal instead. No marker, no zeph_ask
-result — but remote-active-<hash> is still live, so the hook emits:
-  "still in sticky REMOTE mode — end this response with zeph_ask"
+...later the user types at the terminal instead. No marker, so they are
+back at the keyboard: the hook rm's remote-active-<hash> and emits once
+  "left sticky REMOTE mode — answer normally (Rule 4)"
+  ↓
+Every later terminal turn: no marker, no state → silent no-op
+  ↓
+The user picks the phone back up and sends another message → new marker,
+REMOTE again
 ```
 
 **Debugging:**

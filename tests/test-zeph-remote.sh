@@ -201,16 +201,62 @@ assert "legacy marker matches"   [ -n "$CTX" ]
 assert "legacy marker consumed"  [ ! -f "$LEGACY" ]
 
 echo
-echo "[sticky state alive, no marker → reminder (the device-switch case)]"
+echo "[sticky state alive, no marker → the user is back at the terminal: leave REMOTE]"
 P="$WORK/proj-sticky"
 write_state "$P"
 OUT=$(run_hook "typed at the terminal mid-session" "$P" "hook_123")
 RC=$?
 CTX=$(printf '%s' "$OUT" | ctx_of)
 assert "exit 0"                  [ "$RC" -eq 0 ]
-assert "emits a reminder"        grep -q "REMOTE" <<<"$CTX"
-assert "state kept"              [ -f "$(state_path "$P")" ]
+assert "says REMOTE has ended"   grep -q "LEFT sticky REMOTE mode" <<<"$CTX"
+assert "state cleared"           [ ! -f "$(state_path "$P")" ]
 assert_not "not the entry note"  grep -q "arrived from the user's phone" <<<"$CTX"
+
+echo
+echo "[the exit note is emitted once — later terminal turns are silent]"
+OUT=$(run_hook "and another one" "$P" "hook_123")
+assert "no output"  [ -z "$OUT" ]
+
+echo
+echo "[fresh marker left unmatched → REMOTE survives (a phone message is in flight)]"
+# The digest missing is not evidence the user typed: the message may be queued
+# behind a long turn, or the two sides may hash a composition differently.
+# Dropping REMOTE here strands a user who is still holding the phone.
+P="$WORK/proj-pending"
+write_state "$P"
+write_marker "$P" "the phone message"
+OUT=$(run_hook "not the injected text" "$P" "hook_123")
+assert "no output"     [ -z "$OUT" ]
+assert "state kept"    [ -f "$(state_path "$P")" ]
+assert "marker kept"   [ -f "$(marker_path "$P")" ]
+
+echo
+echo "[empty prompt with a marker pending → no evidence, state kept]"
+P="$WORK/proj-empty-sticky"
+write_state "$P"
+write_marker "$P" "the phone message"
+OUT=$(printf '{"prompt":""}' \
+  | CLAUDE_PROJECT_DIR="$P" XDG_STATE_HOME="$WORK/state" ZEPH_HOOK_ID=x bash "$HOOK_SCRIPT" 2>/dev/null)
+assert "no output"   [ -z "$OUT" ]
+assert "state kept"  [ -f "$(state_path "$P")" ]
+
+echo
+echo "[stale marker on a live REMOTE session → still a terminal turn, REMOTE ends]"
+P="$WORK/proj-stale-sticky"
+write_state "$P"
+write_marker "$P" "old phone text" 1000
+CTX=$(run_hook "typed at the terminal" "$P" "hook_123" | ctx_of)
+assert "says REMOTE has ended"  grep -q "LEFT sticky REMOTE mode" <<<"$CTX"
+assert "state cleared"          [ ! -f "$(state_path "$P")" ]
+assert "stale marker swept"     [ ! -f "$(marker_path "$P")" ]
+
+echo
+echo "[a phone message after that re-enters REMOTE (re-entry is one message)]"
+P="$WORK/proj-sticky"
+write_marker "$P" "back on the phone"
+CTX=$(run_hook "back on the phone" "$P" "hook_123" | ctx_of)
+assert "entry note again"  grep -q "arrived from the user's phone" <<<"$CTX"
+assert "state written"     [ -f "$(state_path "$P")" ]
 
 echo
 echo "[marker match writes the sticky state]"

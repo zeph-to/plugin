@@ -14,13 +14,17 @@
 #      (≤15 min), and byte-identical trimmed text. A terminal keystroke racing
 #      a phone message can never false-match.
 #
-#   2. Staying there. The marker is one-shot, but REMOTE is not — the user can
-#      answer from the phone on one turn and type at the terminal on the next.
-#      Those terminal turns carry no marker and no zeph_ask tool_result, and
-#      they are exactly where the mode used to run out of evidence. So entry
-#      also records the mode in `remote-active-<hash>` (see gate.sh), and every
-#      later turn re-reads it and re-states the mode. Because that lives in a
-#      file, it survives context compaction — which is what Rule 13 promises.
+#   2. Leaving. The marker is one-shot, but REMOTE is not — it is recorded in
+#      `remote-active-<hash>` (see gate.sh) so it outlives the entry turn and
+#      survives context compaction, which is what Rule 13 promises. A prompt
+#      that reaches this hook without a marker was typed at the terminal: the
+#      only way text becomes a prompt without one is the user's own keyboard
+#      (phone answers to a zeph_ask come back as a tool_result and never reach
+#      a prompt hook at all). The user is back, so the mode ends here — clear
+#      the state and say so once. Re-entry costs one more phone message.
+#      The exception is a fresh marker left unmatched: a phone message is in
+#      flight, the evidence is ambiguous, and the mode is left exactly as it
+#      was (see remote_origin_match's three-way verdict).
 #
 # No marker and no live state → silent no-op. This hook only ever adds context
 # and must never block a prompt (always exit 0).
@@ -52,9 +56,22 @@ hash_stdin() {
     fi
 }
 
-# rc 0 when this prompt is a verified phone injection. Consumes the marker on a
-# match, deletes it once stale, and otherwise leaves it in place so a prompt
-# that simply isn't the injected one can still match on a later turn.
+# Three-way verdict, because "not a phone message" and "typed at the terminal"
+# are not the same claim and the exit branch may only act on the second:
+#
+#   0 PHONE      verified injection; marker consumed
+#   1 KEYBOARD   no marker this prompt could ever have matched — the user typed
+#   2 UNCLEAR    a fresh marker is sitting here unmatched, so a phone message is
+#                in flight (queued behind a long turn, or a digest the two sides
+#                compute differently). Ambiguous evidence must not be read as
+#                "the user is back": that would drop them out of REMOTE while
+#                they are still holding the phone, with no answerable push left.
+#                Also an unreadable prompt while such a marker is pending. With
+#                no marker in play an empty prompt still reads as KEYBOARD: the
+#                listener never injects empty text, so there is nothing in
+#                flight to be ambiguous about — and testing emptiness before
+#                the marker would put a jq spawn on every prompt in every
+#                project, which is what the file test above exists to avoid.
 remote_origin_match() {
     local marker ts recorded ws prompt digest
 
@@ -65,9 +82,11 @@ remote_origin_match() {
     marker=$(zeph_state_present remote "$HASH") || return 1
 
     prompt=$(printf '%s' "$INPUT" | jq -r '.prompt // empty' 2>/dev/null)
-    [ -n "$prompt" ] || return 1
+    [ -n "$prompt" ] || return 2
 
     # Marker format: "<epochSec> <sha256hex>\n" (written by cli listener.ts).
+    # Junk here can never match anything, so it says nothing about who typed —
+    # same verdict as no marker at all.
     read -r ts recorded < "$marker" 2>/dev/null || return 1
     case "$ts" in '' | *[!0-9]*) return 1 ;; esac
     [ -n "$recorded" ] || return 1
@@ -93,8 +112,8 @@ remote_origin_match() {
     prompt="${prompt#"${prompt%%[!${ws}]*}"}"
     prompt="${prompt%"${prompt##*[!${ws}]}"}"
 
-    digest=$(printf '%s' "$prompt" | hash_stdin) || return 1
-    [ "$digest" = "$recorded" ] || return 1
+    digest=$(printf '%s' "$prompt" | hash_stdin) || return 2
+    [ "$digest" = "$recorded" ] || return 2
 
     # Matched — consume the marker so an identical later prompt (e.g. typed at
     # the terminal) can't re-flag. The explicit `return 0` matters: `rm` fails
@@ -106,28 +125,33 @@ remote_origin_match() {
     return 0
 }
 
-# Exactly one additionalContext per invocation: entry wins over the reminder,
-# because on the entry turn the reminder would say strictly less.
-if remote_origin_match; then
+# Exactly one additionalContext per invocation, and the verdict decides which:
+# PHONE enters, KEYBOARD leaves, UNCLEAR says nothing and leaves the mode as it
+# was — the pending marker will speak for itself on the turn it matches.
+remote_origin_match
+ORIGIN=$?
+
+if [ "$ORIGIN" -eq 0 ]; then
     if [ -n "${ZEPH_HOOK_ID:-}" ]; then
         # Only a two-way session has a mode to stay in — without zeph_ask there
         # is nothing for a later turn to be reminded of, so no state is written.
         zeph_remote_touch "$HASH"
         CTX='# System note (Zeph remote-origin detect)
 
-This user message arrived from the user'"'"'s phone via Zeph agent chat (verified by the listener — exact text match). The user is driving this session remotely and is NOT at the terminal. Enter sticky REMOTE mode now (CORE_RULES Rule 9): end EVERY response with `zeph_ask` (buttons + free-text) until the user sends an exit signal (done/stop/exit). Plain-text questions are invisible to them.'
+This user message arrived from the user'"'"'s phone via Zeph agent chat (verified by the listener — exact text match). The user is driving this session remotely and is NOT at the terminal. Enter sticky REMOTE mode now (CORE_RULES Rule 9): end EVERY response with `zeph_ask` (buttons + free-text) until the user exits — an exit signal (done/stop/exit), or a prompt they type at the terminal, which this hook will tell you about. Plain-text questions are invisible to them.'
     else
         CTX='# System note (Zeph remote-origin detect)
 
 This user message arrived from the user'"'"'s phone via Zeph agent chat (verified by the listener — exact text match), but ZEPH_HOOK_ID is not set, so two-way tools (zeph_ask/zeph_prompt/zeph_input) are unavailable. Make your final message self-contained — the Stop-hook push is the user'"'"'s only feedback channel. If you have not already mentioned it this session, tell the user once that running `npx @zeph-to/cli setup` upgrades this into a two-way remote session (buttons + text replies from the phone).'
     fi
-elif [ -n "${ZEPH_HOOK_ID:-}" ] && zeph_remote_active "$HASH"; then
-    # Deliberately one sentence: this goes out on EVERY turn of a remote
-    # session, so anything longer would spend per-turn what the rule text
-    # spends once.
+elif [ "$ORIGIN" -eq 1 ] && [ -n "${ZEPH_HOOK_ID:-}" ] && zeph_remote_active "$HASH"; then
+    # KEYBOARD on a live REMOTE session: the user typed this at the terminal,
+    # so they are back and REMOTE ends. Emitted once — the state is gone, so
+    # every later terminal turn is a silent no-op and costs nothing per turn.
+    zeph_remote_clear "$HASH"
     CTX='# System note (Zeph)
 
-This session is still in sticky REMOTE mode — the user has been driving it from their phone and may not be at the terminal to read this. End this response with `zeph_ask` (CORE_RULES Rule 9).'
+The user typed this prompt at the terminal, so this session has LEFT sticky REMOTE mode — answer normally (CORE_RULES Rule 4) and do not end this response with `zeph_ask` just to keep the loop alive. Rule 3 still holds: if you actually ask the user something, ask it with `zeph_ask`. Re-entry is automatic the moment they send another message from their phone.'
 else
     exit 0
 fi
