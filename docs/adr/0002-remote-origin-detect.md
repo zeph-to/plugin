@@ -155,6 +155,39 @@ provide everything downstream of detection.
 - **C. Model self-detection via `zeph_list`**: per-turn MCP call, LLM-driven
   inference, non-deterministic. Rejected.
 
+## Amendment (2026-08-12) — a terminal-typed prompt leaves REMOTE
+
+0.11.0 gave REMOTE a home (`remote-active-<hash>`) so it survives compaction,
+and decided that a turn the user types at the terminal *keeps* the mode: the
+user might switch back to the phone, and the reminder keeps the channel
+driveable from either side.
+
+In use that reads as the session refusing to let go. The user is sitting at the
+terminal, typing, watching the pane — and every answer still comes back as a
+phone-shaped `zeph_ask`. Rule 9's three exits (Done-like button, the model's
+free-text call, the 4-hour TTL) all miss that case, and a non-Done button tap
+*renews* the TTL, so an active session never ages out.
+
+So a prompt with no marker now ends REMOTE. The signal is as deterministic as
+entry: the only way text becomes a prompt without a listener marker is the
+user's own keyboard — a phone answer to a `zeph_ask` comes back as a
+`tool_result` and never reaches a prompt hook at all. The hook clears the state
+and says so once; later terminal turns are silent no-ops, which also drops the
+per-turn context cost the reminder was paying.
+
+- **Cost:** re-entry is one phone message (the next injection writes a fresh
+  marker). The device-switch case the original design protected is not free
+  anymore, but it was protecting the rarer direction.
+- **Not every miss is a keyboard.** The matcher returns three verdicts, not a
+  boolean: a *fresh* marker left unmatched means a phone message is in flight
+  (queued behind a long turn, or a digest the two sides compute differently),
+  and reading that as "the user is back" would drop them out of REMOTE while
+  they are still holding the phone — with no answerable push left, the quiet
+  failure Rule 4 calls worse than light spam. Only "no marker this prompt could
+  have matched" ends the mode; ambiguity leaves it exactly as it was. A stale
+  or unparseable marker can never match and counts as no marker.
+- Shipped in `hooks/zeph-remote.sh`, `cli/src/remote-hook.ts`, and Rule 9.
+
 ## Related
 - ADR-0001 (Push Signal): the marker precedent and the "plugin-only vs coupled
   release" trade-off this ADR consciously takes the other side of.

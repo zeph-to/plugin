@@ -210,12 +210,15 @@ zeph_read_pushmode() {
 # something stale, and the refresh below always writes the XDG path, so such a
 # file would never expire.
 #
-# The TTL exists because nothing owns "this session ended" — there is no
-# SessionEnd hook — so a crash or Ctrl-C would otherwise latch REMOTE forever
-# and every later session in the project would keep asking a phone nobody is
-# holding. Four hours is generous on purpose: the file is refreshed on every
-# phone prompt and every answered zeph_ask, so it only has to outlive a working
-# session, never an idle user. The TS twin is cli/src/gate.ts REMOTE_TTL_SEC.
+# The TTL is the backstop, not the usual exit. The named exits — a Done-like
+# zeph_ask answer, the model's `<!-- zeph: exit -->`, and a prompt the user
+# typed at the terminal — all clear the file outright. What none of them covers
+# is a session that simply died (there is no SessionEnd hook), and without a
+# TTL a crash or Ctrl-C would latch REMOTE forever, leaving every later session
+# in the project asking a phone nobody is holding. Four hours is generous on
+# purpose: the file is refreshed on every phone prompt and every answered
+# zeph_ask, so it only has to outlive a working session, never an idle user.
+# The TS twin is cli/src/gate.ts REMOTE_TTL_SEC.
 ZEPH_REMOTE_TTL=14400
 
 zeph_remote_state_file() { echo "$ZEPH_STATE_DIR/remote-active-$1"; }

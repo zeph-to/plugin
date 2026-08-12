@@ -156,20 +156,18 @@ zeph_ask({
 #### State Detection
 
 - **`zeph_ask` results carry it.** The server applies the transition it can see and reports where the session landed as `zephState: "REMOTE" | "NORMAL"` — any answer that is not a Done-like action id enters REMOTE, a Done-like id exits, and so does a timeout that fell back to one. A result with no `zephState` is an ask that timed out onto a safe fallback and changed nothing.
-- **Prompt-submit hooks say it, where they are installed** (the Claude Code plugin, or the hooks `zeph setup` installs for Gemini/Codex): a remote-origin system note on the turn a phone message arrives, and a one-line reminder on every later turn the session is still remote — including turns the user types at the terminal.
+- **Prompt-submit hooks say it, where they are installed** (the Claude Code plugin, or the hooks `zeph setup` installs for Gemini/Codex): a remote-origin system note on the turn a phone message arrives, and a note that the session has LEFT REMOTE on the first turn the user types at the terminal. A prompt with no phone marker came from the user's own keyboard — a phone answer to a `zeph_ask` comes back as a `tool_result` and never reaches a prompt hook — so the user is demonstrably back, and staying in REMOTE would answer the terminal with a phone loop. Re-entry costs them one message from the phone.
 - **Neither one present → NORMAL.**
 
-**The one call left to you is free text**, because it is the one signal no hook can read. The server cannot tell "run the tests" from "thanks, that's it". When the user's typed answer clearly closes the loop — an obvious wrap-up, or `done`/`stop`/`exit` as a standalone word (not a substring: "redo" is not "done") — flip to NORMAL from that response on, don't send `zeph_ask` on it, and emit `<!-- zeph: exit -->` once so the hooks agree with you. Your own flip is what ends the loop; the marker is how you tell a hook that cannot read your mind. Only the Claude Code plugin's Stop hook consumes it today — elsewhere it is inert and harmless, and the session still leaves REMOTE on a Done-like button or when the state expires. The marker is separate from the Push Signal markers (`skip`/`push`/`high`), which steer notifications and say nothing about the mode; where a Stop hook does consume it, it is stripped from the push body.
+**The one call left to you is free text**, because it is the one signal no hook can read. The server cannot tell "run the tests" from "thanks, that's it". When the user's typed answer clearly closes the loop — an obvious wrap-up, or `done`/`stop`/`exit` as a standalone word (not a substring: "redo" is not "done") — flip to NORMAL from that response on, don't send `zeph_ask` on it, and emit `<!-- zeph: exit -->` once so the hooks agree with you. Your own flip is what ends the loop; the marker is how you tell a hook that cannot read your mind. Only the Claude Code plugin's Stop hook consumes it today — elsewhere it is inert and harmless, and the session still leaves REMOTE on a Done-like button, on the next prompt the user types at the terminal, or when the state expires. The marker is separate from the Push Signal markers (`skip`/`push`/`high`), which steer notifications and say nothing about the mode; where a Stop hook does consume it, it is stripped from the push body.
 
 #### Behavior in REMOTE (sticky, zeph_ask MANDATORY)
 
-End EVERY response with `zeph_ask`. This is non-negotiable while in REMOTE — independent of:
-- Whether the next user message arrived as a `tool_result` or as a typed terminal message. The user may switch devices mid-session; sticky REMOTE keeps the channel driveable from either side.
-- Whether the work was substantial or routine.
+End EVERY response with `zeph_ask`. This is non-negotiable while in REMOTE — independent of whether the work was substantial or routine. What ends it is the user coming back: a prompt they typed at the terminal leaves REMOTE (the hook says so on that turn), and from there Rule 4 applies again.
 
 Set each REMOTE ask up so silence degrades cleanly: `timeout` 300–600 s and a Done-like `fallback` id. An unanswered ask then exits the loop quietly — the server treats a Done-like fallback as an exit — instead of chaining more notifications at a user who stepped away, and re-entry is cheap: they just send another message from the phone.
 
-The only way to leave REMOTE is the user signalling exit.
+Four things leave REMOTE: a Done-like button (or a timeout that fell back to one), your own read of a free-text wrap-up, a prompt the user typed at the terminal, and — for a session nobody exited because it crashed — the state expiring.
 
 #### Behavior in NORMAL (apply Rule 4)
 
