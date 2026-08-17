@@ -140,7 +140,7 @@ if [ "$ORIGIN" -eq 0 ]; then
         zeph_remote_touch "$HASH"
         CTX='# System note (Zeph remote-origin detect)
 
-This user message arrived from the user'"'"'s phone via Zeph agent chat (verified by the listener — exact text match). The user is driving this session remotely and is NOT at the terminal. Enter sticky REMOTE mode now (CORE_RULES Rule 9): end EVERY response with `zeph_ask` (buttons + free-text) until the user exits — an exit signal (done/stop/exit), or a prompt they type at the terminal, which this hook will tell you about. Plain-text questions are invisible to them.'
+This user message arrived from the user'"'"'s phone via Zeph agent chat (verified by the listener — exact text match). The user is driving this session remotely and is NOT at the terminal. Enter sticky REMOTE mode now (CORE_RULES Rule 9): end EVERY response with `zeph_ask` — with `actions`: 2–4 buttons carrying the next-step candidates plus a Done-like fallback, alongside free-text (a text-only ask leaves the phone with nothing to tap) — until the user exits — an exit signal (done/stop/exit), or a prompt they type at the terminal, which this hook will tell you about. Plain-text questions are invisible to them.'
     else
         CTX='# System note (Zeph remote-origin detect)
 
