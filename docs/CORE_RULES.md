@@ -129,6 +129,29 @@ zeph_ask({
 
 5. Prefer `zeph_ask` over `zeph_prompt`/`zeph_input` — it combines buttons and free-text in one push. Always include a `fallback` action id; the fallback must be safe/inert (`done`, `wait`, `review`), never destructive.
 
+   **`actions` is the steering surface, not decoration.** Ship 2–4 buttons on nearly every ask: the next-step candidates you would otherwise write as prose ("/simplify → /ship next") belong in `actions`, plus a safe Done-like fallback. Leave `actions` out ONLY when the answer is inherently free-form text (a name, a path, a paragraph). A text-only ask on a "done — what next?" turn is the most common way REMOTE silently degrades: the phone gets a text box and nothing to tap, and the user has to type the command you already knew.
+
+   Anti-pattern (wrong — next steps in prose, ask has no buttons):
+   ```
+   "...done. /simplify → /explain-diff (optional) → /ship next."
+   zeph_ask({ title: "Slice done", body: "..." })
+   ```
+   Correct:
+   ```
+   zeph_ask({
+     title: "Slice done — next?",
+     body: "<short result>",
+     actions: [
+       { id: "simplify",     label: "/simplify" },
+       { id: "explain_diff", label: "/explain-diff" },
+       { id: "ship",         label: "/ship" },
+       { id: "done",         label: "Stop here" }
+     ],
+     placeholder: "or type something else...",
+     fallback: "done"
+   })
+   ```
+
 6. Example `zeph_ask` shape — use sparingly per Rule 4 (only at natural pause points; NOT after every response — see Rule 9):
    ```
    zeph_ask({
@@ -163,7 +186,7 @@ zeph_ask({
 
 #### Behavior in REMOTE (sticky, zeph_ask MANDATORY)
 
-End EVERY response with `zeph_ask`. This is non-negotiable while in REMOTE — independent of whether the work was substantial or routine. What ends it is the user coming back: a prompt they typed at the terminal leaves REMOTE (the hook says so on that turn), and from there Rule 4 applies again.
+End EVERY response with `zeph_ask` — with `actions` (Rule 5: the next-step candidates as buttons, plus a Done-like fallback; text-only asks are for inherently free-form answers). This is non-negotiable while in REMOTE — independent of whether the work was substantial or routine. What ends it is the user coming back: a prompt they typed at the terminal leaves REMOTE (the hook says so on that turn), and from there Rule 4 applies again.
 
 Set each REMOTE ask up so silence degrades cleanly: `timeout` 300–600 s and a Done-like `fallback` id. An unanswered ask then exits the loop quietly — the server treats a Done-like fallback as an exit — instead of chaining more notifications at a user who stepped away, and re-entry is cheap: they just send another message from the phone.
 
