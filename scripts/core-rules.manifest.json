@@ -11,12 +11,7 @@
     {
       "heading": "### Push Signal — steer the end-of-turn auto-push (Stop hook)",
       "audiences": [],
-      "note": "ADR-0001: rule-only agents never get this (no hook to honor markers); hook-driven agents only once their hooks extract markers from the response — flip to [\"hook-driven\"] when per-agent marker adapters land."
-    },
-    {
-      "heading": "### Common Mistakes to Avoid",
-      "audiences": [],
-      "note": "Claude Code-flavored examples (AskUserQuestion); the load-bearing rules are restated in the sections below."
+      "note": "ADR-0001: rule-only agents never get this (no hook to honor markers); hook-driven agents only once their hooks extract markers from the response — flip to [\"hook-driven\"] when per-agent marker adapters land. The section carries `zeph-branch` blocks the Claude Code SessionStart hook selects between by push dial; any future extraction must strip them."
     },
     {
       "heading": "### When zeph_ask is MANDATORY",

@@ -138,9 +138,20 @@ if [ "$ORIGIN" -eq 0 ]; then
         # Only a two-way session has a mode to stay in — without zeph_ask there
         # is nothing for a later turn to be reminded of, so no state is written.
         zeph_remote_touch "$HASH"
+        # This turn is the transition, so it is where the contract has to
+        # arrive in full. The SessionStart hook only ships a two-line stub of
+        # Rule 9 to a NORMAL session — it cannot know a phone message is
+        # coming — so entry is the one moment the whole section is worth its
+        # bytes. Read from CORE_RULES.md rather than restated here: a copy
+        # would be a fourth place for the rule to drift. If the file is
+        # unreadable the summary below still enters REMOTE correctly.
         CTX='# System note (Zeph remote-origin detect)
 
 This user message arrived from the user'"'"'s phone via Zeph agent chat (verified by the listener — exact text match). The user is driving this session remotely and is NOT at the terminal. Enter sticky REMOTE mode now (CORE_RULES Rule 9): end EVERY response with `zeph_ask` — with `actions`: 2–4 buttons carrying the next-step candidates plus a Done-like fallback, alongside free-text (a text-only ask leaves the phone with nothing to tap) — until the user exits — an exit signal (done/stop/exit), or a prompt they type at the terminal, which this hook will tell you about. Plain-text questions are invisible to them.'
+        RULE9=$(zeph_core_section '### Sticky REMOTE mode (Rule 9)') \
+            && CTX="$CTX
+
+$RULE9"
     else
         CTX='# System note (Zeph remote-origin detect)
 

@@ -65,11 +65,16 @@ HOOKID_PRESENT=0
 [ -n "${ZEPH_HOOK_ID:-}" ] && HOOKID_PRESENT=1
 REPLAY=0
 zeph_ask_replay_seen "$ASK_KEY" && REPLAY=1
+# Sticky REMOTE is what makes the picker unreachable, so it is what makes the
+# block worth its cost. In NORMAL the user is at the keyboard as far as anything
+# here can tell, and the picker opens exactly as it always did.
+REMOTE=0
+zeph_remote_active "$MUTE_HASH" && REMOTE=1
 
 # muted is passed as 0 because a muted project already left this script at the
 # `zeph_state_present muted` check above. The parameter stays in the function's
 # signature so the decision reads completely on its own in the vectors.
-if [ "$(zeph_ask_decide "$HOOKID_PRESENT" 0 "$HAS_PREVIEW" "$QUESTION_CHARS" "$OPTION_CHARS" "$REPLAY")" = deny ]; then
+if [ "$(zeph_ask_decide "$HOOKID_PRESENT" 0 "$HAS_PREVIEW" "$QUESTION_CHARS" "$OPTION_CHARS" "$REPLAY" "$REMOTE")" = deny ]; then
     zeph_ask_replay_mark "$ASK_KEY"
     # Deliberately NOT trimmed: trim_chars below exists for the device feed
     # preview, and the model has to re-ask this question verbatim.

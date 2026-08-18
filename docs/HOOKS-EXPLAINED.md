@@ -29,9 +29,30 @@ The plugin installs 4 hooks that fire automatically on Claude Code events:
 - Every time you start Claude Code (`claude` command)
 - Once per session (does not re-run mid-session)
 
-**What it injects:**
-- If `ZEPH_API_KEY` is set: rules for two-way or one-way mode (depending on `ZEPH_HOOK_ID`)
-- If `ZEPH_API_KEY` is NOT set: helper message suggesting `npx @zeph-to/cli setup`
+**What it injects — one branch, chosen from state the hook can already read:**
+
+| State | Injected | Size |
+|-------|----------|------|
+| No `ZEPH_API_KEY` | helper message suggesting `npx @zeph-to/cli setup` | ~250 B |
+| `/zeph-mute` marker for this project | three lines: hooks are silent, don't call the tools unless asked | ~220 B |
+| No `ZEPH_HOOK_ID` | one-way notify discipline (`zeph_ask`/`prompt`/`input` do not exist) | ~1.3 KB |
+| Sticky REMOTE live (`remote-active-<hash>`) | the sticky-REMOTE contract in full — Rules 3/4/9/10/11 — and no Push Signal, since markers are ignored on a turn that already sent `zeph_ask` | ~7.4 KB |
+| Otherwise | the NORMAL branch: notify discipline, Push Signal, and what starts REMOTE. No ask rules — every one of them is REMOTE-scoped, so a session at the terminal never blocks on a phone answer | ~3.1–3.6 KB |
+
+The Push Signal section follows the project's push-mode dial: on `quiet` (the
+stock default) only the `high` marker does anything, so only that one is
+injected; `normal`/`loud` get all three plus the heuristic.
+
+**Why it branches at all.** Claude Code persists a hook's `additionalContext`
+to a file the moment it exceeds **10,000 chars** and hands the model a
+**2,000-char preview** instead (`cli.js`: `Pyt(e,t,r,n=k$d)`, `k$d=1e4`,
+`hFr=2000`, measured against 2.1.234). The old unconditional block was 15,483
+bytes, so everything past the first 2 KB — the whole Ask Loop, sticky REMOTE,
+the AskUserQuestion override — never reached the model. `tests/test-zeph-setup.sh`
+asserts every branch stays under that ceiling.
+
+Any state read that fails resolves to the NORMAL branch, never back to
+"emit everything".
 
 **Example output:**
 

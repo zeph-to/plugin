@@ -96,6 +96,13 @@ assert "emits additionalContext"         [ -n "$CTX" ]
 assert "context enters REMOTE mode"      grep -q "REMOTE mode" <<<"$CTX"
 assert "context names UserPromptSubmit"  grep -q '"hookEventName": *"UserPromptSubmit"' <<<"$OUT"
 assert "marker consumed (one-shot)"      [ ! -f "$(marker_path "$P")" ]
+# The transition turn is the only channel that ships Rule 9 in full: the
+# SessionStart hook gives a NORMAL session a two-line stub, because it cannot
+# know a phone message is coming. If this stops arriving, that stub is a
+# promise nothing keeps.
+assert "carries Rule 9 in full"          grep -q "State Detection" <<<"$CTX"
+assert "including the exit marker"       grep -q "zeph: exit" <<<"$CTX"
+assert "and the REMOTE timeout window"   grep -q "300–600 s" <<<"$CTX"
 
 echo
 echo "[matching prompt, ZEPH_HOOK_ID unset → one-way conversion CTA]"

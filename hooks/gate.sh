@@ -70,13 +70,14 @@ zeph_gate_decide() {
 # blocks the picker and hands the model the same question to re-ask through
 # `zeph_ask`, `allow` means the picker opens as before.
 #
-# zeph_ask_decide <hookid_present> <muted> <has_preview> <question_chars> <option_chars> <replay>
+# zeph_ask_decide <hookid_present> <muted> <has_preview> <question_chars> <option_chars> <replay> <remote>
 #   hookid_present — 1 when ZEPH_HOOK_ID is set (two-way tools exist)
 #   muted          — 1 when this project is muted
 #   has_preview    — 1 when any option carries a `preview` block
 #   question_chars — length of the question stem
 #   option_chars   — longest label+description across the options
 #   replay         — 1 when this exact question was denied moments ago
+#   remote         — 1 while sticky REMOTE is live for this project
 # Prints exactly one of: "deny" | "allow".
 #
 # ALLOW IS THE SAFE DIRECTION and every uncertain input must reach it. A wrong
@@ -85,6 +86,15 @@ zeph_gate_decide() {
 # are no two-way tools to route to), muted → allow (routing to `zeph_ask` would
 # push around the mute the user set), unparseable numbers → 0 → allow via the
 # hookid check.
+#
+# NOT IN REMOTE → allow, and this is the load-bearing one. A hook id says the
+# user *can* drive from their phone, not that they are: a session in NORMAL is
+# one nobody has driven remotely, so blocking the picker there takes the local
+# picker away from a user sitting at the keyboard and gives them nothing back.
+# Rule 10 still says a button-friendly question belongs in `zeph_ask` whenever
+# the hook id is set — that rule is for the model to follow. This function only
+# decides where the deterministic block is worth its cost, and that is exactly
+# where the picker is demonstrably unreachable: REMOTE.
 #
 # `replay` outranks everything. If the model cannot reach `zeph_ask` — MCP
 # server down, tool not exposed — it will retry AskUserQuestion, and a second
@@ -99,10 +109,12 @@ ZEPH_ASK_MAX_OPTION_CHARS=240
 zeph_ask_decide() {
     local hookid="${1:-0}" muted="${2:-0}" has_preview="${3:-0}"
     local question_chars="${4:-0}" option_chars="${5:-0}" replay="${6:-0}"
+    local remote="${7:-0}"
 
     [ "$replay" = 1 ]      && { echo allow; return 0; }
     [ "$hookid" != 1 ]     && { echo allow; return 0; }
     [ "$muted" = 1 ]       && { echo allow; return 0; }
+    [ "$remote" != 1 ]     && { echo allow; return 0; }
     [ "$has_preview" = 1 ] && { echo allow; return 0; }
 
     # Anything non-numeric means the measurement failed, and a failed
@@ -194,6 +206,30 @@ zeph_read_pushmode() {
         quiet|loud|normal) echo "$mode" ;;
         *)                 echo normal ;;
     esac
+}
+
+# ── CORE_RULES.md section extraction ────────────────────────────────────────
+#
+# zeph_core_section <heading> — print one `###` section of docs/CORE_RULES.md,
+# heading included, up to the next heading of the same or a higher level
+# (`####` subsections stay in). rc 1 and no output when the file or the heading
+# is missing, so a caller can fall back rather than emit an empty rule block.
+#
+# The JS twin is `section()` in hooks/zeph-setup.js — same slice, same reason:
+# both hooks inject a subset of the rules rather than the whole document, and
+# neither may keep its own copy of the text that CORE_RULES.md owns.
+zeph_core_section() {
+    local file out
+    file="$(dirname "${BASH_SOURCE[0]}")/../docs/CORE_RULES.md"
+    [ -f "$file" ] || return 1
+    local hashes="${1%% *}"
+    out=$(awk -v want="$1" -v depth="${#hashes}" '
+        $0 == want { inside = 1; print; next }
+        inside && /^#+ / && index($0, " ") - 1 <= depth { exit }
+        inside { print }
+    ' "$file")
+    [ -n "$out" ] || return 1
+    printf '%s' "$out"
 }
 
 # ── Sticky REMOTE state ─────────────────────────────────────────────────────
