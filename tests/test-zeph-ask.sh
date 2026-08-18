@@ -70,16 +70,33 @@ run_hook() {
         bash "$HOOK_SCRIPT" 2>/dev/null
 }
 
-# Runner for the routing path: a hook id exists, so a push-shaped question is
-# denied and handed back for zeph_ask. Each call gets its own state dir so a
-# replay marker from one case can't allow the next one through.
+# Runner for the routing path: a hook id exists AND sticky REMOTE is live, so a
+# push-shaped question is denied and handed back for zeph_ask. Each call gets
+# its own state dir so a replay marker from one case can't allow the next one
+# through — which means the REMOTE state has to be seeded per call too.
+PROJECT_HASH=$(printf '%s' /tmp/test-project | cksum | cut -d' ' -f1)
+
 run_hook_routed() {
     local input="$1"
     local state_dir="${2:-$WORK/routed-state-$RANDOM}"
     rm -f "$WORK/last-call"
+    mkdir -p "$state_dir/zeph"
+    date +%s > "$state_dir/zeph/remote-active-$PROJECT_HASH"
     printf '%s' "$input" \
       | CLAUDE_PROJECT_DIR=/tmp/test-project PATH="$STUB_DIR:$PATH" \
         XDG_STATE_HOME="$state_dir" XDG_CACHE_HOME="$WORK/cache" \
+        ZEPH_HOOK_ID="hook_test_id" HOME="$WORK/no-listener-home" TMUX="" \
+        bash "$HOOK_SCRIPT" 2>/dev/null
+}
+
+# Same, minus the REMOTE state: a hook id on its own must not take the local
+# picker away from a user who is demonstrably at the keyboard.
+run_hook_normal() {
+    local input="$1"
+    rm -f "$WORK/last-call"
+    printf '%s' "$input" \
+      | CLAUDE_PROJECT_DIR=/tmp/test-project PATH="$STUB_DIR:$PATH" \
+        XDG_STATE_HOME="$WORK/normal-state-$RANDOM" XDG_CACHE_HOME="$WORK/cache" \
         ZEPH_HOOK_ID="hook_test_id" HOME="$WORK/no-listener-home" TMUX="" \
         bash "$HOOK_SCRIPT" 2>/dev/null
 }
@@ -310,6 +327,16 @@ echo "[routing — a different question in the same window is still denied]"
 OTHER='{"tool_input":{"questions":[{"question":"Continue?","options":[{"label":"Yes"},{"label":"No"}]}]}}'
 OUT=$(run_hook_routed "$OTHER" "$REPLAY_STATE")
 assert "no collision with the first"   deny_json_has '.hookSpecificOutput.permissionDecision == "deny"'
+
+echo
+echo "[NORMAL — a hook id alone does not take the picker away]"
+# The regression this guards: with the deny keyed on ZEPH_HOOK_ID alone, a user
+# sitting at the terminal in a session nobody ever drove from a phone had every
+# AskUserQuestion blocked. REMOTE is the state that makes the picker unreachable.
+PICKER='{"tool_input":{"questions":[{"question":"Apply fix A or B?","options":[{"label":"Apply A"},{"label":"Apply B"}]}]}}'
+OUT=$(run_hook_normal "$PICKER")
+assert_not "not denied outside REMOTE" deny_json_has '.hookSpecificOutput.permissionDecision == "deny"'
+assert "and the question still pushes" zeph_called
 
 echo
 echo "[routing — input jq cannot read is pushed, not denied]"

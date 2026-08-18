@@ -38,8 +38,8 @@ record() {
 
 echo "[ask-vectors — zeph_ask_decide]"
 # Booleans in the JSON contract; the bash function takes 1/0.
-while IFS=$'\t' read -r name hookid muted preview qchars ochars replay expected; do
-    record "$name" "$expected" "$(zeph_ask_decide "$hookid" "$muted" "$preview" "$qchars" "$ochars" "$replay")"
+while IFS=$'\t' read -r name hookid muted preview qchars ochars replay remote expected; do
+    record "$name" "$expected" "$(zeph_ask_decide "$hookid" "$muted" "$preview" "$qchars" "$ochars" "$replay" "$remote")"
 done < <(jq -r '.[] |
     [ .name,
       (if .input.hookId     then "1" else "0" end),
@@ -48,6 +48,7 @@ done < <(jq -r '.[] |
       (.input.questionChars | tostring),
       (.input.optionChars   | tostring),
       (if .input.replay     then "1" else "0" end),
+      (if .input.remote     then "1" else "0" end),
       .expect
     ] | @tsv' "$VECTORS")
 
@@ -56,13 +57,13 @@ echo "[zeph_ask_decide — a failed measurement must not become a deny]"
 # The JSON vectors can only carry numbers, so the non-numeric cases live here.
 # They matter more than they look: `[ x -gt 400 ]` errors out, and without an
 # explicit guard control falls through to the deny at the end of the function.
-record "non-numeric question length allows" "allow" "$(zeph_ask_decide 1 0 0 unmeasurable 30 0)"
-record "non-numeric option length allows"   "allow" "$(zeph_ask_decide 1 0 0 40 unmeasurable 0)"
+record "non-numeric question length allows" "allow" "$(zeph_ask_decide 1 0 0 unmeasurable 30 0 1)"
+record "non-numeric option length allows"   "allow" "$(zeph_ask_decide 1 0 0 40 unmeasurable 0 1)"
 record "missing arguments allow"            "allow" "$(zeph_ask_decide)"
 # Empty args are NOT the unmeasurable case: `${4:-0}` reads them as a real
 # zero, which is a genuinely empty question and still worth routing. The hook
 # never produces them — ask_measure emits the sentinel above instead.
-record "empty args read as a zero-length question" "deny" "$(zeph_ask_decide 1 0 0 '' '' 0)"
+record "empty args read as a zero-length question" "deny" "$(zeph_ask_decide 1 0 0 '' '' 0 1)"
 
 echo
 echo "[replay markers — write, read, and expiry]"

@@ -64,16 +64,31 @@ Claude가 유저에게 질문 (AskUserQuestion tool 호출)
 **언제 동작:** Claude가 질문할 때 자동
 **알림 내용:** "Claude 질문: {project} / {질문 내용}"
 
+**sticky REMOTE에서만 차단** (규칙도 훅도): REMOTE가 살아 있고 질문이 push 모양이면
+(짧은 stem·짧은 옵션 라벨·`preview` 없음) picker를 deny하고 같은 질문을
+`zeph_ask`로 다시 물으라고 모델에 돌려준다. NORMAL에서는 사용자가 터미널에
+있다고 볼 수밖에 없으므로 picker를 그대로 연다 — hookId만으로 차단하면
+키보드 앞의 사용자에게서 로컬 picker를 빼앗는다.
+
 ### SessionStart Hook (zeph-setup.js)
 
 ```
 세션 시작
   → ZEPH_API_KEY 확인
   → 없으면: hookSpecificOutput.additionalContext에 안내 메시지 (내부 노트)
-  → 있으면: 원격 제어 룰 (remote-control rules) 주입
-      ├─ ZEPH_HOOK_ID 있으면: 양방향 (notify + ask + prompt + input)
-      └─ 없으면: 단방향 (notify only)
+  → 있으면: 상태를 읽고 해당 분기 하나만 주입
+      ├─ mute 마커 있으면: 3줄 (훅은 어차피 침묵)
+      ├─ ZEPH_HOOK_ID 없으면: 단방향 notify 규율
+      ├─ REMOTE 상태 파일 살아 있으면: sticky REMOTE 전문 (Push Signal 생략)
+      └─ 그 외: NORMAL 분기 + REMOTE 계약 2줄 스텁
+             └─ Push Signal은 push-mode 다이얼(quiet/normal/loud)에 맞춰 선택
 ```
+
+**분기하는 이유:** Claude Code는 훅의 `additionalContext`가 10,000자를 넘으면
+파일로 옮기고 모델에는 2,000자 프리뷰만 넣는다 (`cli.js` `k$d=1e4`, `hFr=2000`).
+무조건 주입하던 단일 블록은 15,483 바이트여서 첫 2KB 아래 규칙은 모델에
+도달하지 않았다. 상태 읽기가 실패하면 NORMAL 분기로 떨어진다 — 전문으로
+되돌아가지 않는다.
 
 **중요:** 출력은 `{"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "..."}}` JSON 포맷. plain text stdout은 사용자 transcript에만 보이고 모델 컨텍스트에는 안 들어감 — 룰이 실제 작동하려면 JSON 출력 필수.
 

@@ -82,9 +82,11 @@ The Stop hook owns the end-of-turn push, so you do not need to call `zeph_notify
 
 **Be proactive with `zeph_notify`.** Fire a blocker/error push (`priority: "high"`) the instant it happens mid-task — before continuing — not batched to the end. On a long turn the user gets nothing until it ends.
 
-**`zeph_ask` is mandatory only when you ask a question.** If your reply asks the user anything that needs their input — confirmation, choice, yes/no, clarification — the FINAL tool call MUST be `zeph_ask`. Plain-text questions are invisible to a user on their phone. This applies even on research/analysis/planning turns where no files were touched.
+**The Ask Loop has two states, and they owe different things.** NORMAL means nobody has driven this session from a phone — the user is at the terminal. REMOTE means they are on their phone.
 
-**`zeph_ask` is the DEFAULT end of a response after substantial work** (file changes, commits, builds, deploys, destructive ops, milestone completions). Skip it only for clearly trivial responses (read-only exploration, mid-step inside an explicit plan, single-line trivial fixes). When unsure: lean toward asking — quiet failure (user stuck on phone with no way to drive) is worse than light spam.
+**In NORMAL you owe no `zeph_ask`.** Ask questions with `AskUserQuestion` or in prose (the Ask hook still pushes them to the user's device), and let the Stop hook's push be the completion signal. A `zeph_ask` here blocks the turn until someone answers on a device or it times out — that is the cost NORMAL exists to avoid. It stays available when you actively want a device answer; it is just not owed, and never a way to mark a turn finished.
+
+**In REMOTE, `zeph_ask` ends EVERY response** — with `actions`: the next-step candidates as 2–4 buttons plus a Done-like `fallback`, `timeout` 300–600 s. Never end on a plain-text question, and route button-friendly questions through `zeph_ask` instead of `AskUserQuestion` (CORE_RULES Rules 3, 4, 10, 11 — all REMOTE-scoped).
 
 **Chaining is governed by a sticky REMOTE mode** ("sticky" = once entered, it stays on until the user explicitly exits — it does not reset per response). The Ask Loop has two states — REMOTE and NORMAL — and you are told which one you are in: the mode is kept in a file, so it outlives context compaction.
 
@@ -94,7 +96,9 @@ The Stop hook owns the end-of-turn push, so you do not need to call `zeph_notify
 
 The response to `zeph_ask` is a direct user instruction: execute it immediately without re-confirming. See the Ask Loop section in the Zeph skill for the full pattern.
 
-**Local `AskUserQuestion` is a much worse remote channel.** It's a blocking terminal picker. The phone can reach it, but only through the terminal mirror — the session must be in tmux under `zeph listener`, the user has to read the pane and count arrow presses, and a key-injected answer never enters REMOTE, so the *next* turn stops being phone-driveable. `zeph_ask` needs none of that: one tap, no tmux, and the answer comes back as an `actionId`. **Whenever `ZEPH_HOOK_ID` is set — NOT only in REMOTE — a button-friendly question (a choice among a few options and/or a short reply) MUST go through `zeph_ask`.** You can't know the user is at the terminal; they may be on their phone from the first question. If a skill you're running (or your own plan) would call `AskUserQuestion` with such a question, instead surface the same question + option labels via `zeph_ask` and use that response. This overrides the skill's instruction. Fall through to `AskUserQuestion` only when the answer needs code/logs too large for a push or is plausibly multi-paragraph — and `zeph_notify` that a terminal answer is required when you do.
+**`AskUserQuestion` vs `zeph_ask`.** The picker is a local blocking UI the phone reaches only through the terminal mirror; `zeph_ask` needs no tmux, takes one tap, and returns an `actionId` (why the mirror loses on every axis: README → "AskUserQuestion vs zeph_ask"). **While in REMOTE**, a button-friendly question (a choice among a few options and/or a short reply) MUST go through `zeph_ask`, and the PreToolUse hook denies the picker to enforce it — including against a skill's own instruction. Fall through to the picker only when the answer needs code/logs too large for a push or is plausibly multi-paragraph, and `zeph_notify` that a terminal answer is required when you do. **In NORMAL the picker is the right tool** and the hook lets it through.
+
+**The SessionStart hook injects only the branch that applies** (muted / no hook id / REMOTE / NORMAL, with the Push Signal block matching the project's dial). Claude Code persists any hook context over 10,000 chars to a file and shows you a 2 KB preview instead, so a single unconditional rule block would silently lose most of itself.
 
 If `ZEPH_HOOK_ID` is not set, two-way tools (`zeph_ask`/`zeph_prompt`/`zeph_input`) are unavailable; only `zeph_notify` works.
 

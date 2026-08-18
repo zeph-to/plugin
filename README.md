@@ -201,19 +201,38 @@ zeph-to/plugin (Claude Code plugin)
 
 ```
 SessionStart hook
-  ├─ read ~/.zeph/config.json
-  ├─ HOOK_ID present → inject ask/prompt/input rules
-  └─ HOOK_ID absent  → inject notify-only rules
+  ├─ read ~/.zeph/config.json + the project's state files
+  ├─ muted            → three lines: hooks are silent, don't call the tools
+  ├─ HOOK_ID absent   → notify-only rules
+  ├─ REMOTE live      → the sticky-REMOTE contract in full, no Push Signal
+  └─ otherwise        → NORMAL rules, Push Signal matching the project's dial
 
 Working…
-  ├─ Choice/input needed → zeph_ask → button or text reply from mobile → continue
-  ├─ Complex question    → AskUserQuestion → Ask hook push → answer at terminal
-  ├─ Task complete       → zeph_ask "Done. Next?" → pick or type → execute → loop
-  │                          └─ tap "Done" → session ends
-  └─ Fallback: AI skipped zeph_ask → Stop hook sends a one-way push
+  ├─ NORMAL (at the terminal)
+  │    ├─ Question       → AskUserQuestion picker + Ask hook push
+  │    └─ Task complete  → Stop hook push only (per your dial)
+  └─ REMOTE (entered by a message from your phone)
+       ├─ Every response → zeph_ask → button or text reply from mobile → continue
+       ├─ Question       → zeph_ask (the picker is denied)
+       └─ tap "Done" / type at the terminal → back to NORMAL
 ```
 
-When a Hook ID is set, Claude uses `zeph_ask` as its final action after real work. Your reply is treated as a direct instruction — executed without re-confirming — then Claude asks again. The loop also starts **from the phone**: send a message via the app's agent chat and the `zeph listener` records exactly what it injected; the plugin's UserPromptSubmit hook verifies the match and Claude knows you're remote (ADR-0002).
+Once a session is in REMOTE, Claude uses `zeph_ask` as its final action on every response. At the terminal (NORMAL) it owes nothing — questions open the local picker and completion is just the Stop-hook push, so a session you are watching never blocks waiting for a phone tap. Your reply is treated as a direct instruction — executed without re-confirming — then Claude asks again. The loop also starts **from the phone**: send a message via the app's agent chat and the `zeph listener` records exactly what it injected; the plugin's UserPromptSubmit hook verifies the match and Claude knows you're remote (ADR-0002).
+</details>
+
+<details>
+<summary><b>AskUserQuestion vs <code>zeph_ask</code></b> — why the local picker is the worse remote channel</summary>
+
+Claude Code's `AskUserQuestion` is a **local blocking picker**: it renders in the terminal and waits for arrow keys. The phone can reach it, but only through the terminal mirror, and that path is worse on every axis:
+
+- it needs the session to be running in tmux under `zeph listener` — no tmux, no mirror at all;
+- it asks you to read an ANSI pane on a phone screen and count arrow presses instead of tapping a labelled button;
+- the answer arrives as injected keystrokes, so the server never sees a `zeph_ask` reply and the session never enters REMOTE — meaning the *next* turn stops being phone-driveable.
+
+`zeph_ask` needs no tmux, takes one tap, and returns an `actionId` the model can branch on. So CORE_RULES Rule 10 tells the model to route any button-friendly question through `zeph_ask`.
+
+**Everything above applies only while sticky REMOTE is live** — and that goes for the rule as well as the hook. A hook id says you *can* drive from your phone, not that you are. In NORMAL the picker is the right tool, it opens exactly as it always did, and you still get the Ask-hook push telling you a question is waiting. Once a session is actually being driven remotely, a push-shaped question (short stem, short option labels, no `preview` block) is denied and handed back to the model to re-ask through `zeph_ask`. Long questions, long option text, and options carrying a `preview` still open the picker — those are answers the push body cannot hold. A repeat of the same denied question is let through too, so a session can never be trapped when the MCP server is unreachable.
+
 </details>
 
 <details>
