@@ -103,6 +103,10 @@ assert "marker consumed (one-shot)"      [ ! -f "$(marker_path "$P")" ]
 assert "carries Rule 9 in full"          grep -q "State Detection" <<<"$CTX"
 assert "including the exit marker"       grep -q "zeph: exit" <<<"$CTX"
 assert "and the REMOTE timeout window"   grep -q "300–600 s" <<<"$CTX"
+# Same ceiling the SessionStart hook is held to: above 10,000 chars Claude
+# Code persists additionalContext to a file and hands the model a 2,000-char
+# preview, which would cut Rule 9 off right where it starts.
+assert "stays under the inline ceiling"  [ "${#CTX}" -le 10000 ]
 
 echo
 echo "[matching prompt, ZEPH_HOOK_ID unset → one-way conversion CTA]"
@@ -217,6 +221,11 @@ RC=$?
 CTX=$(printf '%s' "$OUT" | ctx_of)
 assert "exit 0"                  [ "$RC" -eq 0 ]
 assert "says REMOTE has ended"   grep -q "LEFT sticky REMOTE mode" <<<"$CTX"
+# This turn returns the session to NORMAL, and NORMAL owes no zeph_ask. The
+# note used to say "Rule 3 still holds" here — re-imposing the REMOTE rule
+# on the exact turn the session left it.
+assert "owes no zeph_ask"        grep -q "you owe no" <<<"$CTX"
+assert_not "no leftover Rule 3"  grep -q "Rule 3 still holds" <<<"$CTX"
 assert "state cleared"           [ ! -f "$(state_path "$P")" ]
 assert_not "not the entry note"  grep -q "arrived from the user's phone" <<<"$CTX"
 

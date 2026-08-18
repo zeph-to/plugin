@@ -163,6 +163,20 @@ REMOTE begins the moment the user sends a message from their phone; from that tu
 | **1-2: Notify** | End of response with real work | Skip `zeph_notify` (auto-push) |
 | **1-2: Notify** | Mid-task error or long-running checkpoint | Call `zeph_notify` with `priority: "high"` — the instant it happens, not batched |
 | **Push Signal** | Steer the Stop-hook auto-push (NORMAL mode) | Emit `<!-- zeph: skip\|push\|high -->`; on a stock (quiet) install only `high` gets through |
+| **3: Questions** | REMOTE, and your response asks anything | FINAL tool call = `zeph_ask` |
+| **3: Questions** | NORMAL | `AskUserQuestion` or prose — no `zeph_ask` owed |
+| **4: After work** | REMOTE | End EVERY response with `zeph_ask` (Rule 9) |
+| **4: After work** | NORMAL | End with nothing; the Stop hook's push is the signal |
+| **9: REMOTE** | Entered by a phone message or a non-Done `zeph_ask` answer | End EVERY response with `zeph_ask` |
+| **9: NORMAL** | Initial state, or after any exit | No `zeph_ask` owed |
+| **9: Exit** | Done-like button, free-text wrap-up, or a prompt typed at the terminal | Flip to NORMAL, no ask on the exit response |
+| **10: AskUserQuestion** | REMOTE, button-friendly question | `zeph_ask` — the hook denies the picker |
+| **10: AskUserQuestion** | NORMAL, or the answer needs code/logs / multi-paragraph | `AskUserQuestion` opens as usual |
+
+------|------|--------|
+| **1-2: Notify** | End of response with real work | Skip `zeph_notify` (auto-push) |
+| **1-2: Notify** | Mid-task error or long-running checkpoint | Call `zeph_notify` with `priority: "high"` — the instant it happens, not batched |
+| **Push Signal** | Steer the Stop-hook auto-push (NORMAL mode) | Emit `<!-- zeph: skip\|push\|high -->`; on a stock (quiet) install only `high` gets through |
 | **3: Questions** | Your response asks anything | FINAL tool call = `zeph_ask` |
 | **4: After work** | Substantial changes (files, builds, deploys) | Default = end with `zeph_ask` |
 | **4: Trivial** | Read-only, mid-plan, typo fixes | Skip `zeph_ask`, let Stop hook fire |
@@ -173,5 +187,5 @@ REMOTE begins the moment the user sends a message from their phone; from that tu
 
 ---
 
-**Last updated**: 2026-07-03
+**Last updated**: 2026-08-18
 **Synced across**: plugin, CLAUDE.md, SKILL.md, cli/templates.ts (generated via cli/scripts/sync-from-plugin.mjs)

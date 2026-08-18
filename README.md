@@ -229,7 +229,7 @@ Claude Code's `AskUserQuestion` is a **local blocking picker**: it renders in th
 - it asks you to read an ANSI pane on a phone screen and count arrow presses instead of tapping a labelled button;
 - the answer arrives as injected keystrokes, so the server never sees a `zeph_ask` reply and the session never enters REMOTE — meaning the *next* turn stops being phone-driveable.
 
-`zeph_ask` needs no tmux, takes one tap, and returns an `actionId` the model can branch on. So CORE_RULES Rule 10 tells the model to route any button-friendly question through `zeph_ask` whenever `ZEPH_HOOK_ID` is set.
+`zeph_ask` needs no tmux, takes one tap, and returns an `actionId` the model can branch on. So CORE_RULES Rule 10 tells the model to route any button-friendly question through `zeph_ask`.
 
 **Everything above applies only while sticky REMOTE is live** — and that goes for the rule as well as the hook. A hook id says you *can* drive from your phone, not that you are. In NORMAL the picker is the right tool, it opens exactly as it always did, and you still get the Ask-hook push telling you a question is waiting. Once a session is actually being driven remotely, a push-shaped question (short stem, short option labels, no `preview` block) is denied and handed back to the model to re-ask through `zeph_ask`. Long questions, long option text, and options carrying a `preview` still open the picker — those are answers the push body cannot hold. A repeat of the same denied question is let through too, so a session can never be trapped when the MCP server is unreachable.
 

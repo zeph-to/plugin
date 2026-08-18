@@ -36,7 +36,7 @@
     {
       "heading": "### Mute",
       "audiences": [],
-      "note": "/zeph-mute etc. are Claude Code slash commands; other agents have no equivalent dial UI."
+      "note": "/zeph-mute etc. are Claude Code slash commands; other agents have no equivalent dial UI. Not injected by the Claude Code SessionStart hook either — it is a user command catalog, carried by the individual skill descriptions and README, not an agent behavior."
     },
     {
       "heading": "### Persistence",

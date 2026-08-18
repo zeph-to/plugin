@@ -164,7 +164,7 @@ elif [ "$ORIGIN" -eq 1 ] && [ -n "${ZEPH_HOOK_ID:-}" ] && zeph_remote_active "$H
     zeph_remote_clear "$HASH"
     CTX='# System note (Zeph)
 
-The user typed this prompt at the terminal, so this session has LEFT sticky REMOTE mode — answer normally (CORE_RULES Rule 4) and do not end this response with `zeph_ask` just to keep the loop alive. Rule 3 still holds: if you actually ask the user something, ask it with `zeph_ask`. Re-entry is automatic the moment they send another message from their phone.'
+The user typed this prompt at the terminal, so this session has LEFT sticky REMOTE mode — you owe no `zeph_ask` from here on. Do not end this response with one just to keep the loop alive; if you need to ask something, use `AskUserQuestion` or plain prose (the Ask hook still pushes the question to their device). Re-entry is automatic the moment they send another message from their phone.'
 else
     exit 0
 fi
