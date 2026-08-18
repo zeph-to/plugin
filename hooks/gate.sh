@@ -217,7 +217,11 @@ zeph_read_pushmode() {
 #
 # The JS twin is `section()` in hooks/zeph-setup.js — same slice, same reason:
 # both hooks inject a subset of the rules rather than the whole document, and
-# neither may keep its own copy of the text that CORE_RULES.md owns.
+# neither may keep its own copy of the text that CORE_RULES.md owns. NOT the
+# same post-processing: the JS side also resolves `<!-- zeph-branch -->` /
+# `<!-- zeph-doc-only -->` blocks. This one does not, so it must only ever be
+# aimed at a section that carries none (Rule 9 today) — pointing it at
+# `### Push Signal` would leak raw markers into the model's context.
 zeph_core_section() {
     local file out
     file="$(dirname "${BASH_SOURCE[0]}")/../docs/CORE_RULES.md"

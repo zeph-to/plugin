@@ -94,7 +94,7 @@ A stock install has no dial, which means quiet; `/zeph-normal` and `/zeph-loud` 
 
 #### Behavior in REMOTE (sticky, zeph_ask MANDATORY)
 
-End EVERY response with `zeph_ask`, carrying 2–4 `actions` (the next-step candidates as buttons) plus a Done-like `fallback` — a text-only ask is only for inherently free-form answers. Non-negotiable while in REMOTE, independent of whether the work was substantial or routine.
+End EVERY response with `zeph_ask`, carrying 2–4 `actions` (the next-step candidates as buttons) plus a Done-like `fallback` — never a destructive one, since an unanswered ask resolves to it — a text-only ask is only for inherently free-form answers. Non-negotiable while in REMOTE, independent of whether the work was substantial or routine.
 
 Set `timeout` 300–600 s so silence degrades cleanly: an unanswered ask exits the loop quietly — the server treats a Done-like fallback as an exit — instead of chaining more notifications at a user who stepped away.
 
@@ -172,18 +172,6 @@ REMOTE begins the moment the user sends a message from their phone; from that tu
 | **9: Exit** | Done-like button, free-text wrap-up, or a prompt typed at the terminal | Flip to NORMAL, no ask on the exit response |
 | **10: AskUserQuestion** | REMOTE, button-friendly question | `zeph_ask` — the hook denies the picker |
 | **10: AskUserQuestion** | NORMAL, or the answer needs code/logs / multi-paragraph | `AskUserQuestion` opens as usual |
-
-------|------|--------|
-| **1-2: Notify** | End of response with real work | Skip `zeph_notify` (auto-push) |
-| **1-2: Notify** | Mid-task error or long-running checkpoint | Call `zeph_notify` with `priority: "high"` — the instant it happens, not batched |
-| **Push Signal** | Steer the Stop-hook auto-push (NORMAL mode) | Emit `<!-- zeph: skip\|push\|high -->`; on a stock (quiet) install only `high` gets through |
-| **3: Questions** | Your response asks anything | FINAL tool call = `zeph_ask` |
-| **4: After work** | Substantial changes (files, builds, deploys) | Default = end with `zeph_ask` |
-| **4: Trivial** | Read-only, mid-plan, typo fixes | Skip `zeph_ask`, let Stop hook fire |
-| **9: REMOTE** | Not in `{done, stop, exit}` button taps | End EVERY response with `zeph_ask` |
-| **9: NORMAL** | Initial state or after exit signal | Apply Rule 4 (substantial → ask) |
-| **9: Exit** | User says done/stop/exit | Flip to NORMAL, no ask on exit response |
-| **10: AskUserQuestion** | Need user input with code/logs too big | Use `AskUserQuestion` (not `zeph_ask`) |
 
 ---
 

@@ -82,6 +82,9 @@ ctx_has()     { printf '%s' "$CTX" | grep -qF -- "$1"; }
 ctx_min_len() { [ "${#CTX}" -ge "$1" ]; }
 ctx_max_len() { [ "${#CTX}" -le "$1" ]; }
 ctx_inline()  { ctx_max_len "$INLINE_CEILING"; }
+# The branch/doc-only markers are how CORE_RULES.md carries text for more than
+# one state; the hook resolves them and none may reach the model.
+ctx_no_markers() { ! printf '%s' "$CTX" | grep -qE '<!-- /?zeph-(branch|doc-only)'; }
 
 # ── tests ──────────────────────────────────────────────────────────────────
 
@@ -90,6 +93,7 @@ state_reset
 CTX=$(run_hook ZEPH_API_KEY=test-key ZEPH_HOOK_ID=test-hook)
 assert "emits non-trivial rules (≥500 chars)"  ctx_min_len 500
 assert "fits inline, uncut"                    ctx_inline
+assert "no branch markers leak"                ctx_no_markers
 assert "carries two-way rule content"          ctx_has "zeph_ask"
 assert "says the user is at the terminal"      ctx_has "the user is at the terminal"
 assert "states no ask is owed"                 ctx_has "You owe no"
@@ -114,6 +118,7 @@ CTX=$(run_hook ZEPH_API_KEY=test-key ZEPH_HOOK_ID=test-hook)
 assert "normal dial → all three markers"      ctx_has "zeph: skip"
 assert "and the heuristic it overrides"       ctx_has "read-only (Read/Grep/Glob)"
 assert "still fits inline"                    ctx_inline
+assert "no branch markers leak"                ctx_no_markers
 
 echo
 echo "[REMOTE — sticky state is live for this project]"
@@ -121,6 +126,7 @@ state_reset
 date +%s > "$STATE/zeph/remote-active-$PROJECT_HASH"
 CTX=$(run_hook ZEPH_API_KEY=test-key ZEPH_HOOK_ID=test-hook)
 assert "fits inline, uncut"                    ctx_inline
+assert "no branch markers leak"                ctx_no_markers
 assert "says the session is in REMOTE"         ctx_has "this session is in REMOTE"
 assert "carries the sticky-REMOTE contract"    ctx_has "State Detection"
 assert "carries the MANDATORY-ask rule"        ctx_has "NEVER end a response"
@@ -153,6 +159,7 @@ state_reset
 CTX=$(run_hook ZEPH_API_KEY=test-key)
 assert "emits non-trivial rules (≥300 chars)"  ctx_min_len 300
 assert "fits inline, uncut"                    ctx_inline
+assert "no branch markers leak"                ctx_no_markers
 assert "carries one-way rule content"          ctx_has "zeph_notify"
 assert "labels mode one-way"                   ctx_has "Mode: one-way"
 assert "notes two-way tools unavailable"       ctx_has "ZEPH_HOOK_ID"

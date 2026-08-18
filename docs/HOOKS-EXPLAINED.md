@@ -60,7 +60,7 @@ Any state read that fails resolves to the NORMAL branch, never back to
 {
   "hookSpecificOutput": {
     "hookEventName": "SessionStart",
-    "additionalContext": "# Zeph — Remote-Control Rules (active every response)\n\nZeph lets the user drive this session from their phone...\n[full rules from CORE_RULES.md]"
+    "additionalContext": "# Zeph — Notification Rules (active every response)\n\n## NORMAL — the user is at the terminal\n\n...\n[the branch's sections from CORE_RULES.md]\n\nMode: two-way (notify + ask + prompt + input)"
   }
 }
 ```
