@@ -76,16 +76,19 @@ run_hook() {
 # through — which means the REMOTE state has to be seeded per call too.
 PROJECT_HASH=$(printf '%s' /tmp/test-project | cksum | cut -d' ' -f1)
 
+# run_hook_routed <input> [state_dir] [hook_id] [home] — hook_id may be empty
+# to make ~/.zeph/config.json under <home> the only source of the id.
 run_hook_routed() {
     local input="$1"
     local state_dir="${2:-$WORK/routed-state-$RANDOM}"
+    local hook_id="${3-hook_test_id}" home="${4:-$WORK/no-listener-home}"
     rm -f "$WORK/last-call"
     mkdir -p "$state_dir/zeph"
     date +%s > "$state_dir/zeph/remote-active-$PROJECT_HASH"
     printf '%s' "$input" \
       | CLAUDE_PROJECT_DIR=/tmp/test-project PATH="$STUB_DIR:$PATH" \
         XDG_STATE_HOME="$state_dir" XDG_CACHE_HOME="$WORK/cache" \
-        ZEPH_HOOK_ID="hook_test_id" HOME="$WORK/no-listener-home" TMUX="" \
+        ZEPH_HOOK_ID="$hook_id" HOME="$home" TMUX="" \
         bash "$HOOK_SCRIPT" 2>/dev/null
 }
 
@@ -311,6 +314,14 @@ echo
 echo "[routing — no hook id means no zeph_ask to route to]"
 run_hook '{"tool_input":{"questions":[{"question":"Apply fix?","options":[{"label":"Yes"}]}]}}'
 assert "pushes instead of denying"     zeph_called
+
+echo
+echo "[routing — hook id from ~/.zeph/config.json routes too (env is not the only store)]"
+CONFIG_HOME="$WORK/config-home"; mkdir -p "$CONFIG_HOME/.zeph"
+printf '{"apiKey":"k","hookId":"hook_from_config"}\n' > "$CONFIG_HOME/.zeph/config.json"
+OUT=$(run_hook_routed '{"tool_input":{"questions":[{"question":"Apply fix?","options":[{"label":"Yes"}]}]}}' "" "" "$CONFIG_HOME")
+assert "denies with a config-only hook id"  deny_json_has '.hookSpecificOutput.permissionDecision == "deny"'
+assert "sends no push of its own"           zeph_silent
 
 echo
 echo "[routing — a retry gets through so the session cannot be trapped]"

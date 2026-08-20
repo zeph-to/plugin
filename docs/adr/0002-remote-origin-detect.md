@@ -188,6 +188,19 @@ per-turn context cost the reminder was paying.
   or unparseable marker can never match and counts as no marker.
 - Shipped in `hooks/zeph-remote.sh`, `cli/src/remote-hook.ts`, and Rule 9.
 
+## Amendment (2026-08-21) — the hook id resolves from config.json too
+
+The decision above keyed the two branches on `ZEPH_HOOK_ID` alone. `zeph setup`
+never exports that variable — it writes `hookId` to `~/.zeph/config.json`, and
+the SessionStart hook and the MCP server read it from there. So a stock
+install got the conversion-funnel note on every phone message while `zeph_ask`
+itself worked, and the one-way branch reached a user it was never meant for.
+
+Both hooks now resolve the id through gate.sh `zeph_hook_id` (env when it
+carries a real value, else the config file); the TS twin does the same via
+cli `config.ts`. The funnel branch keeps its purpose — it fires only when no
+hook id exists anywhere.
+
 ## Related
 - ADR-0001 (Push Signal): the marker precedent and the "plugin-only vs coupled
   release" trade-off this ADR consciously takes the other side of.

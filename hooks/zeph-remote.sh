@@ -134,7 +134,9 @@ remote_origin_match
 ORIGIN=$?
 
 if [ "$ORIGIN" -eq 0 ]; then
-    if [ -n "${ZEPH_HOOK_ID:-}" ]; then
+    # Two-way hook id (gate.sh zeph_hook_id) — resolved here and in the exit
+    # branch only; the common no-marker path never pays for it.
+    if [ -n "$(zeph_hook_id)" ]; then
         # Only a two-way session has a mode to stay in — without zeph_ask there
         # is nothing for a later turn to be reminded of, so no state is written.
         zeph_remote_touch "$HASH"
@@ -155,9 +157,9 @@ $RULE9"
     else
         CTX='# System note (Zeph remote-origin detect)
 
-This user message arrived from the user'"'"'s phone via Zeph agent chat (verified by the listener — exact text match), but ZEPH_HOOK_ID is not set, so two-way tools (zeph_ask/zeph_prompt/zeph_input) are unavailable. Make your final message self-contained — the Stop-hook push is the user'"'"'s only feedback channel. If you have not already mentioned it this session, tell the user once that running `npx @zeph-to/cli setup` upgrades this into a two-way remote session (buttons + text replies from the phone).'
+This user message arrived from the user'"'"'s phone via Zeph agent chat (verified by the listener — exact text match), but no hook id is configured (neither `ZEPH_HOOK_ID` nor `hookId` in ~/.zeph/config.json), so two-way tools (zeph_ask/zeph_prompt/zeph_input) are unavailable. Make your final message self-contained — the Stop-hook push is the user'"'"'s only feedback channel. If you have not already mentioned it this session, tell the user once that running `npx @zeph-to/cli setup` upgrades this into a two-way remote session (buttons + text replies from the phone).'
     fi
-elif [ "$ORIGIN" -eq 1 ] && [ -n "${ZEPH_HOOK_ID:-}" ] && zeph_remote_active "$HASH"; then
+elif [ "$ORIGIN" -eq 1 ] && zeph_remote_active "$HASH" && [ -n "$(zeph_hook_id)" ]; then
     # KEYBOARD on a live REMOTE session: the user typed this at the terminal,
     # so they are back and REMOTE ends. Emitted once — the state is gone, so
     # every later terminal turn is a silent no-op and costs nothing per turn.

@@ -100,6 +100,6 @@ The response to `zeph_ask` is a direct user instruction: execute it immediately 
 
 **The SessionStart hook injects only the branch that applies** (muted / no hook id / REMOTE / NORMAL, with the Push Signal block matching the project's dial). Claude Code persists any hook context over 10,000 chars to a file and shows you a 2 KB preview instead, so a single unconditional rule block would silently lose most of itself.
 
-If `ZEPH_HOOK_ID` is not set, two-way tools (`zeph_ask`/`zeph_prompt`/`zeph_input`) are unavailable; only `zeph_notify` works.
+If no hook id is configured (`ZEPH_HOOK_ID` env, else `hookId` in `~/.zeph/config.json` — see docs/HOOKS-EXPLAINED.md), two-way tools (`zeph_ask`/`zeph_prompt`/`zeph_input`) are unavailable; only `zeph_notify` works.
 
 <!-- SYNC: See docs/CORE_RULES.md for the single source of truth. This file provides a condensed quick-reference version for system memory. The SessionStart hook (zeph-setup.js) reads CORE_RULES.md at runtime. Before publishing, sync cli/src/templates.ts ZEPH_CORE with CORE_RULES.md. Run: npm run lint:rules-sync -->
