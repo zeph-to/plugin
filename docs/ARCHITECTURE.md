@@ -78,7 +78,7 @@ Claude가 유저에게 질문 (AskUserQuestion tool 호출)
   → 없으면: hookSpecificOutput.additionalContext에 안내 메시지 (내부 노트)
   → 있으면: 상태를 읽고 해당 분기 하나만 주입
       ├─ mute 마커 있으면: 3줄 (훅은 어차피 침묵)
-      ├─ ZEPH_HOOK_ID 없으면: 단방향 notify 규율
+      ├─ hook id 없으면 (ZEPH_HOOK_ID env도, ~/.zeph/config.json hookId도 없음): 단방향 notify 규율
       ├─ REMOTE 상태 파일 살아 있으면: sticky REMOTE 전문 (Push Signal 생략)
       └─ 그 외: NORMAL 분기 + REMOTE 계약 2줄 스텁
              └─ Push Signal은 push-mode 다이얼(quiet/normal/loud)에 맞춰 선택
@@ -169,7 +169,7 @@ hook의 자동 푸시 볼륨을 조절. mute가 완전 침묵이라면 push mode
 → 단, 답변은 터미널에서 해야 함.
 
 ### 3. 모바일에서 직접 답변/지시하고 싶다 (원격 제어)
-→ `ZEPH_HOOK_ID` 설정만 하면 됨. SessionStart 훅이 자동으로 양방향 룰을 주입.
+→ hook id만 있으면 됨 (`zeph setup`이 `~/.zeph/config.json`에 `hookId`로 저장 — `ZEPH_HOOK_ID` env는 선택). SessionStart 훅이 자동으로 양방향 룰을 주입.
 → 별도 프롬프트 불필요. 모델이 작업 종료 시 `zeph_ask`로 다음 액션 버튼+자유 입력을 보내고, 폰 응답을 직접 명령으로 해석해 즉시 실행 (Ask Loop).
 → `done`/`stop`/`exit` 응답 또는 타임아웃 fallback으로 루프 종료.
 

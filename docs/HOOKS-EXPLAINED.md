@@ -35,7 +35,7 @@ The plugin installs 4 hooks that fire automatically on Claude Code events:
 |-------|----------|------|
 | No `ZEPH_API_KEY` | helper message suggesting `npx @zeph-to/cli setup` | ~250 B |
 | `/zeph-mute` marker for this project | three lines: hooks are silent, don't call the tools unless asked | ~220 B |
-| No `ZEPH_HOOK_ID` | one-way notify discipline (`zeph_ask`/`prompt`/`input` do not exist) | ~1.3 KB |
+| No hook id (`ZEPH_HOOK_ID` env or `hookId` in `~/.zeph/config.json`) | one-way notify discipline (`zeph_ask`/`prompt`/`input` do not exist) | ~1.3 KB |
 | Sticky REMOTE live (`remote-active-<hash>`) | the sticky-REMOTE contract in full — Rules 1-3, 7-11, 13 (Rule 4 is subsumed by Rule 9 there) — and no Push Signal, since markers are ignored on a turn that already sent `zeph_ask` | ~7.4 KB |
 | Otherwise | the NORMAL branch: notify discipline, Push Signal, and what starts REMOTE. No ask rules — every one of them is REMOTE-scoped, so a session at the terminal never blocks on a phone answer | ~3.1–3.6 KB |
 
@@ -266,9 +266,14 @@ ls "${XDG_STATE_HOME:-$HOME/.local/state}/zeph/muted-$HASH"
 - On match: consumes the marker (one-shot), records the mode in the state file
   below, and injects context telling the model the user is remote → sticky
   REMOTE mode (every response ends with an answerable `zeph_ask`)
-- Without `ZEPH_HOOK_ID`: one-way variant — tells the model to make the
+- Without a hook id: one-way variant — tells the model to make the
   Stop-hook push self-contained and mention `npx @zeph-to/cli setup` once. No
-  state is recorded: without `zeph_ask` there is no mode to stay in
+  state is recorded: without `zeph_ask` there is no mode to stay in. The hook
+  id is `ZEPH_HOOK_ID` when set to a real value (an unresolved `${…}`
+  placeholder counts as unset), else `hookId` in `~/.zeph/config.json`. One
+  contract, mirrored per runtime: gate.sh `zeph_hook_id` (shell hooks),
+  zeph-setup.js `envOr` (SessionStart), cli `config.ts`, mcp-server
+  `config.ts` — each with its own tests
 
 *Leaving:*
 - The marker is one-shot, but REMOTE is not — it lives in the state file below,

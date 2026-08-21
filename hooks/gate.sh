@@ -71,7 +71,7 @@ zeph_gate_decide() {
 # `zeph_ask`, `allow` means the picker opens as before.
 #
 # zeph_ask_decide <hookid_present> <muted> <has_preview> <question_chars> <option_chars> <replay> <remote>
-#   hookid_present — 1 when ZEPH_HOOK_ID is set (two-way tools exist)
+#   hookid_present — 1 when a hook id resolves (zeph_hook_id: env or config.json)
 #   muted          — 1 when this project is muted
 #   has_preview    — 1 when any option carries a `preview` block
 #   question_chars — length of the question stem
@@ -234,6 +234,28 @@ zeph_core_section() {
     ' "$file")
     [ -n "$out" ] || return 1
     printf '%s' "$out"
+}
+
+# ── Hook id (two-way) resolution ─────────────────────────────────────────────
+#
+# zeph_hook_id — echoes the two-way hook id, or nothing when the install is
+# notify-only. The order is the one zeph-setup.js (`envOr('ZEPH_HOOK_ID') ||
+# config.hookId`) and the MCP server (`resolvedEnv('ZEPH_HOOK_ID') ??
+# fileConfig.hookId`) already use: the env var when it carries a real value
+# — an unresolved `${ZEPH_HOOK_ID}` placeholder forwarded from an .mcp.json
+# env block counts as unset — else `hookId` in ~/.zeph/config.json, which
+# `zeph setup` writes. Four runtimes, one contract (docs/HOOKS-EXPLAINED.md);
+# the shell hooks were the one reader that skipped the file.
+#
+# Forks `jq` on the config path — call it only on the branch that needs the
+# answer, never up front (the hooks that source this run on every prompt).
+zeph_hook_id() {
+    local id="${ZEPH_HOOK_ID:-}"
+    case "$id" in '${'*) id="" ;; esac
+    if [ -z "$id" ] && [ -n "${HOME:-}" ] && [ -f "$HOME/.zeph/config.json" ]; then
+        id=$(jq -r '.hookId // empty' "$HOME/.zeph/config.json" 2>/dev/null)
+    fi
+    printf '%s' "$id"
 }
 
 # ── Sticky REMOTE state ─────────────────────────────────────────────────────

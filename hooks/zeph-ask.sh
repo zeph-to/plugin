@@ -61,8 +61,6 @@ ASK_HASH=$(printf '%s' "$INPUT" | jq -cS '.tool_input' 2>/dev/null | cksum | tr 
 # deny must not let the other's picker through.
 ASK_KEY="${MUTE_HASH}-${ASK_HASH}"
 
-HOOKID_PRESENT=0
-[ -n "${ZEPH_HOOK_ID:-}" ] && HOOKID_PRESENT=1
 REPLAY=0
 zeph_ask_replay_seen "$ASK_KEY" && REPLAY=1
 # Sticky REMOTE is what makes the picker unreachable, so it is what makes the
@@ -70,6 +68,10 @@ zeph_ask_replay_seen "$ASK_KEY" && REPLAY=1
 # here can tell, and the picker opens exactly as it always did.
 REMOTE=0
 zeph_remote_active "$MUTE_HASH" && REMOTE=1
+# A deny needs REMOTE as well, so the hook id (gate.sh zeph_hook_id — a jq
+# fork on the config path) is only looked up once REMOTE is known to be live.
+HOOKID_PRESENT=0
+[ "$REMOTE" = 1 ] && [ -n "$(zeph_hook_id)" ] && HOOKID_PRESENT=1
 
 # muted is passed as 0 because a muted project already left this script at the
 # `zeph_state_present muted` check above. The parameter stays in the function's

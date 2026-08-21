@@ -15,6 +15,7 @@ HOOK_SCRIPT="$SCRIPT_DIR/../hooks/zeph-remote.sh"
 command -v jq >/dev/null || { echo "jq required" >&2; exit 1; }
 
 WORK=$(mktemp -d)
+mkdir -p "$WORK/home"   # empty HOME for run_hook: no ~/.zeph/config.json
 LEGACY_MARKERS=()
 cleanup() {
     rm -rf "$WORK"
@@ -72,13 +73,30 @@ write_marker() {
     printf '%s %s\n' "$(( $(date +%s) - age ))" "$(sha_of "$text")" > "$(marker_path "$dir")"
 }
 
-# run_hook <prompt> <project_dir> [hook_id]
+# run_hook <prompt> <project_dir> [hook_id] [home]
 # Echoes hook stdout; exit status is the hook's exit status.
+# HOME is pinned to an empty dir by default: the hook falls back to
+# $HOME/.zeph/config.json for the hook id, and the real one would otherwise
+# turn every "ZEPH_HOOK_ID unset" case two-way on a machine that runs zeph.
 run_hook() {
-    local prompt="$1" project_dir="$2" hook_id="${3:-}"
+    local prompt="$1" project_dir="$2" hook_id="${3:-}" home="${4:-$WORK/home}"
     jq -n --arg p "$prompt" '{prompt: $p}' \
       | CLAUDE_PROJECT_DIR="$project_dir" XDG_STATE_HOME="$WORK/state" \
-        ZEPH_HOOK_ID="$hook_id" bash "$HOOK_SCRIPT" 2>/dev/null
+        ZEPH_HOOK_ID="$hook_id" HOME="$home" bash "$HOOK_SCRIPT" 2>/dev/null
+}
+
+# home_with_config [hook_id] — a HOME whose ~/.zeph/config.json is what
+# `zeph setup` writes; no hook_id = a notify-only install. One dir, rewritten
+# per call.
+home_with_config() {
+    local home="$WORK/home-cfg"
+    mkdir -p "$home/.zeph"
+    if [ -n "${1:-}" ]; then
+        printf '{"apiKey":"k","hookId":"%s"}\n' "$1" > "$home/.zeph/config.json"
+    else
+        printf '{"apiKey":"k"}\n' > "$home/.zeph/config.json"
+    fi
+    echo "$home"
 }
 
 ctx_of() { jq -r '.hookSpecificOutput.additionalContext // empty' 2>/dev/null; }
@@ -117,6 +135,41 @@ assert "emits additionalContext"      [ -n "$CTX" ]
 assert "mentions setup CTA"           grep -q "npx @zeph-to/cli setup" <<<"$CTX"
 assert_not "does not claim two-way"   grep -q "end EVERY response" <<<"$CTX"
 assert "marker consumed"              [ ! -f "$(marker_path "$P")" ]
+
+echo
+echo "[ZEPH_HOOK_ID unset, hookId in ~/.zeph/config.json → two-way (env is not the only store)]"
+# The shape `zeph setup` leaves behind — see gate.sh zeph_hook_id.
+P="$WORK/proj-config"
+write_marker "$P" "from the phone, config only"
+CTX=$(run_hook "from the phone, config only" "$P" "" "$(home_with_config hook_cfg)" | ctx_of)
+assert "enters REMOTE"           grep -q "REMOTE mode" <<<"$CTX"
+assert_not "no setup CTA"        grep -q "npx @zeph-to/cli setup" <<<"$CTX"
+assert "state written"           [ -f "$(state_path "$P")" ]
+
+echo
+echo "[unresolved \${ZEPH_HOOK_ID} placeholder → treated as unset (one-way when config has no id)]"
+P="$WORK/proj-placeholder"
+write_marker "$P" "placeholder in env"
+CTX=$(run_hook "placeholder in env" "$P" '${ZEPH_HOOK_ID}' "$(home_with_config)" | ctx_of)
+assert "mentions setup CTA"          grep -q "npx @zeph-to/cli setup" <<<"$CTX"
+assert_not "does not enter REMOTE"   grep -q "end EVERY response" <<<"$CTX"
+
+echo
+echo "[config.json without hookId, env unset → one-way CTA (a notify-only install)]"
+P="$WORK/proj-config-noid"
+write_marker "$P" "notify-only install"
+CTX=$(run_hook "notify-only install" "$P" "" "$(home_with_config)" | ctx_of)
+assert "mentions setup CTA"          grep -q "npx @zeph-to/cli setup" <<<"$CTX"
+assert_not "does not enter REMOTE"   grep -q "end EVERY response" <<<"$CTX"
+assert "no state written"            [ ! -f "$(state_path "$P")" ]
+
+echo
+echo "[sticky state alive, env unset, hookId in config.json → terminal turn still ends REMOTE]"
+P="$WORK/proj-sticky-config"
+write_state "$P"
+CTX=$(run_hook "typed at the terminal" "$P" "" "$(home_with_config hook_cfg)" | ctx_of)
+assert "says REMOTE has ended"  grep -q "LEFT sticky REMOTE mode" <<<"$CTX"
+assert "state cleared"          [ ! -f "$(state_path "$P")" ]
 
 echo
 echo "[text mismatch → silent, marker kept (terminal race can't false-match)]"
