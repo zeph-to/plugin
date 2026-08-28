@@ -20,10 +20,15 @@ This file is the authoritative source and is read by:
    - User-discoverable documentation
 
 4. **CLI Templates** (`cli/src/zeph-core.generated.ts`, consumed by `cli/src/templates.ts`)
-   - Shared across 7 agents (Cursor, Windsurf, Gemini, Codex, Copilot, Cline, Aider)
+   - Shared across 9 agents (Cursor, Windsurf, Gemini, Codex, Copilot, Cline,
+     Aider, Pi, OpenCode)
    - GENERATED: `cli/scripts/sync-from-plugin.mjs` runs this repo's
      `scripts/extract-core.js` (driven by `scripts/core-rules.manifest.json`)
      and rewrites the generated file; cli CI fails on drift
+   - The extractor renumbers each assembled core to 1..N and moves the
+     cross-references with it, so an audience that is missing a rule still
+     reads as a whole list. The numbers here therefore do NOT line up with
+     `CORE_RULES.md` — reference a rule by name when you write about both.
 
 ## Why This Matters
 

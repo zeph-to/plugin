@@ -7,6 +7,11 @@
 #     /zeph-* dial), so surviving prose that says "your Push Signal" or "the
 #     user's dial" is an unfollowable instruction on all eight of them
 #     (PI-RULES-AUDIT F1, measured against a live pi install).
+#   - the numbering the CLI harnesses see must read as a whole list. The manifest
+#     drops rules 1-2 and 12, so the raw slice opens at 3 and jumps 11 -> 13,
+#     which reads as truncated context (PI-RULES-AUDIT F4). The extractor
+#     renumbers at render time; cross-references have to move with it or the
+#     core points at rules that no longer carry those numbers.
 #   - the disambiguation those sentences carried must survive the rewrite:
 #     `<!-- zeph: exit -->` is a marker the CLI core DOES tell agents to emit,
 #     and Rule 9 has to keep saying it is not a mode signal.
@@ -71,6 +76,44 @@ echo "── extracted core: the rewrite kept what it was disambiguating ──"
 assert "still names the exit marker"     core_has "zeph: exit"
 assert "still carries sticky REMOTE"     core_has "Sticky REMOTE mode"
 assert "still carries the NORMAL branch" core_has "no zeph_ask is owed"
+
+echo "── extracted core: renumbered 1..N with cross-references in step ──"
+
+# Top-level ordered markers, in document order. Column-0 anchored so an
+# indented sub-list inside a rule can never be mistaken for a rule number.
+markers() {
+    printf '%s\n' "$1" | grep -oE '^[0-9]+\.' | tr -d '.' | tr '\n' ' ' | sed 's/ $//'
+}
+HOOK_CORE=$(node -e '
+const { extractCore } = require(process.argv[1]);
+process.stdout.write(extractCore().hookDriven);
+' "$EXTRACTOR")
+
+assert "hook-driven core numbers 1..10" \
+    test "$(markers "$HOOK_CORE")" = "1 2 3 4 5 6 7 8 9 10"
+assert "sticky REMOTE heading follows the new number" core_has "Sticky REMOTE mode (Rule 7)"
+assert "singular cross-reference remapped"            core_has "Rule 7 says when to send one"
+assert "list cross-reference remapped"                core_has "Rules 1, 2, 8 and 9 are in force"
+assert_not "no reference to a pre-renumber number"    core_has_re "Rules? (3|4|9|10|11|12|13)\b"
+
+echo "── renumber: an unmappable reference is a hard error ──"
+assert "throws on a reference to a dropped rule" node -e '
+const { renumberRules } = require(process.argv[1]);
+// Guard the vacuous pass: a missing export would make the call below throw a
+// TypeError and look like the hard-fail this test is meant to prove.
+if (typeof renumberRules !== "function") process.exit(1);
+// Both casings: a mid-sentence "rule 12" is as unfollowable as "Rule 12", and
+// only the regex tells them apart.
+for (const ref of ["Rule 12", "rule 12"]) {
+    try {
+        renumberRules(`3. first\n\n4. see ${ref} for the dial\n`);
+        process.exit(1);
+    } catch (err) {
+        if (!/Rule 12/.test(err.message)) process.exit(1);
+    }
+}
+process.exit(0);
+' "$EXTRACTOR"
 
 echo
 echo "Extract-core: $PASS/$TOTAL passed"
