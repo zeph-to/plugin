@@ -54,7 +54,7 @@ A stock install has no dial, which means quiet; `/zeph-normal` and `/zeph-loud` 
 
 4. **In REMOTE, `zeph_ask` is the DEFAULT end of EVERY response** — not conditioned on the work being substantial (Rule 9).
 
-    **In NORMAL, end with nothing.** The Stop hook's push — tuned by the user's dial and your Push Signal — is the completion signal. Do not chain a `zeph_ask` onto substantial work to "keep the loop alive": the loop starts when the user sends a message from their phone, not when you decide the work was big enough. `zeph_ask` stays available when you actively want an answer from their device; it is simply not owed.
+    **In NORMAL, end with nothing.** The Stop hook's push is the completion signal. Do not chain a `zeph_ask` onto substantial work to "keep the loop alive": the loop starts when the user sends a message from their phone, not when you decide the work was big enough. `zeph_ask` stays available when you actively want an answer from their device; it is simply not owed.
 
 5. When you do ask, prefer `zeph_ask` over `zeph_prompt`/`zeph_input` — it combines buttons and free text in one push. **`actions` is the steering surface, not decoration:** ship 2–4 buttons on nearly every ask (the next-step candidates you would otherwise write as prose) plus a safe Done-like `fallback` id — never a destructive one. Leave `actions` out ONLY when the answer is inherently free-form (a name, a path, a paragraph); a text-only ask on a "done — what next?" turn is the most common way REMOTE silently degrades, because the phone gets a text box and nothing to tap.
 
@@ -90,7 +90,7 @@ A stock install has no dial, which means quiet; `/zeph-normal` and `/zeph-loud` 
 - **Prompt-submit hooks say it**, where installed (this plugin, or the hooks `zeph setup` writes for Gemini/Codex): a remote-origin note on the turn a phone message arrives, and a note that the session has LEFT REMOTE on the first turn the user types at the terminal. A phone answer to a `zeph_ask` comes back as a `tool_result` and never reaches a prompt hook, so a prompt with no phone marker is demonstrably the user's own keyboard — staying in REMOTE would answer the terminal with a phone loop, and re-entry costs them one message from the phone.
 - **Neither one present → NORMAL.**
 
-**The one call left to you is free text**, because it is the one signal no hook can read: the server cannot tell "run the tests" from "thanks, that's it". When the user's typed answer clearly closes the loop — an obvious wrap-up, or `done`/`stop`/`exit` as a standalone word (not a substring: "redo" is not "done") — flip to NORMAL from that response on, don't send `zeph_ask` on it, and emit `<!-- zeph: exit -->` once so the hooks agree with you. Your own flip is what ends the loop; the marker is how you tell a hook that cannot read your mind, and it is separate from the Push Signal markers (`skip`/`push`/`high`), which say nothing about the mode.
+**The one call left to you is free text**, because it is the one signal no hook can read: the server cannot tell "run the tests" from "thanks, that's it". When the user's typed answer clearly closes the loop — an obvious wrap-up, or `done`/`stop`/`exit` as a standalone word (not a substring: "redo" is not "done") — flip to NORMAL from that response on, don't send `zeph_ask` on it, and emit `<!-- zeph: exit -->` once so the hooks agree with you. Your own flip is what ends the loop; the marker is how you tell a hook that cannot read your mind, and it is separate from any push-volume marker, which says nothing about the mode.
 
 #### Behavior in REMOTE (sticky, zeph_ask MANDATORY)
 
@@ -105,7 +105,7 @@ Four things leave REMOTE: a Done-like button (or a timeout that fell back to one
 The user is at the terminal — that is what NORMAL means. Nothing here obliges an ask:
 
 - Questions go to `AskUserQuestion` or plain prose. The Ask hook still pushes them to the user's device, so a question is never lost.
-- Completion is the Stop hook's push, steered by the dial and your Push Signal.
+- Completion is the Stop hook's push.
 - `zeph_ask` remains available when you actively want an answer from their device — it is not owed, and never as a way to mark a turn finished.
 
 REMOTE begins the moment the user sends a message from their phone; from that turn on, Rules 3, 4, 10 and 11 are in force.
