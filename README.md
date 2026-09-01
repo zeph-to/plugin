@@ -155,7 +155,7 @@ zeph install --key ak_... --hook hook_...
 
 **Gemini CLI:**
 ```bash
-gemini mcp add zeph -- npx -y @zeph-to/mcp-server
+gemini mcp add -s user zeph zeph -- mcp
 ```
 
 **Cursor** — add to `~/.cursor/mcp.json` (Windsurf: `~/.codeium/windsurf/mcp_config.json`, same shape):
@@ -163,13 +163,20 @@ gemini mcp add zeph -- npx -y @zeph-to/mcp-server
 {
   "mcpServers": {
     "zeph": {
-      "command": "npx",
-      "args": ["-y", "@zeph-to/mcp-server"],
+      "command": "zeph",
+      "args": ["mcp"],
       "env": { "ZEPH_API_KEY": "ak_..." }
     }
   }
 }
 ```
+
+`zeph mcp` runs the MCP server inside the `@zeph-to/cli` process. The older
+`"command": "npx"`, `"args": ["-y", "@zeph-to/mcp-server"]` form still works, but
+leaves an `npm exec` launcher resident beside the server for as long as the
+session lives. `zeph mcp` needs a `@zeph-to/cli` new enough to have the
+subcommand — `zeph help` lists it, and `zeph verify` reports which form each of
+your agents is currently registered with.
 </details>
 
 ---
@@ -184,7 +191,7 @@ zeph-to/plugin (Claude Code plugin)
   ├─ hooks/zeph-stop.sh    → Stop: auto completion push
   ├─ hooks/zeph-ask.sh     → PreToolUse: question push
   ├─ hooks/zeph-remote.sh  → UserPromptSubmit: phone-sent message → REMOTE mode
-  ├─ .mcp.json             → registers the MCP server
+  ├─ .mcp.json             → registers the MCP server (`zeph mcp`)
   └─ builds on:
       ├─ @zeph-to/cli         → hooks + notify/list/dismiss + tmux remote control
       └─ @zeph-to/mcp-server  → zeph_ask / zeph_prompt / zeph_input / clipboard / file …
