@@ -56,8 +56,13 @@ EOF
 cat > "$PROBE_DIR/tmux" <<EOF
 #!/bin/bash
 echo "tmux \$*" >> "$WORK/probe-calls"
-[ -f "$WORK/tmux-clients" ] || exit 1
-cat "$WORK/tmux-clients"
+case "\$1" in
+    list-clients)     f="$WORK/tmux-clients" ;;
+    show-environment) f="$WORK/tmux-ssh" ;;
+    *)                exit 1 ;;
+esac
+[ -f "\$f" ] || exit 1
+cat "\$f"
 EOF
 chmod +x "$PROBE_DIR/ioreg" "$PROBE_DIR/tmux"
 # Extra env for the next run_hook (e.g. TMUX=…, ZEPH_AWAY_SEC=…).
@@ -438,7 +443,8 @@ clear_pushmode
 # present.
 
 NOW=$(date +%s)
-reset_probes() { rm -f "$WORK/probe-calls" "$WORK/ioreg-idle-ns" "$WORK/tmux-clients"; HOOK_ENV=(); }
+reset_probes() { rm -f "$WORK/probe-calls" "$WORK/ioreg-idle-ns" "$WORK/tmux-clients" "$WORK/tmux-ssh"; HOOK_ENV=(); }
+tmux_ssh()     { printf '%s\n' "$1" > "$WORK/tmux-ssh"; }
 probes_ran()   { [ -s "$WORK/probe-calls" ]; }
 in_tmux()      { HOOK_ENV+=("TMUX=/tmp/tmux-test/default,1,0" "TMUX_PANE=%1"); }
 clients()      { printf '%s\n' "$@" > "$WORK/tmux-clients"; }
@@ -525,6 +531,21 @@ reset_probes; in_tmux; HOOK_ENV+=("SSH_CONNECTION=10.0.0.1 22 10.0.0.2 22"); hid
 clients "$((NOW - 3600))" "$((NOW - 2))"
 run_hook "$FIXTURES/main-2-tools.jsonl"
 assert "one fresh client → present"           zeph_silent
+
+echo
+echo "[away: inside tmux the session environment decides SSH, not the frozen process env]"
+reset_probes; in_tmux; HOOK_ENV+=("SSH_CONNECTION=10.0.0.1 22 10.0.0.2 22"); tmux_ssh "-SSH_CONNECTION"
+hid_idle 5; clients "$((NOW - 3600))"
+run_hook "$FIXTURES/main-2-tools.jsonl"
+assert "attached locally (tmux unset it) → HID decides, present" zeph_silent
+reset_probes; in_tmux; tmux_ssh "SSH_CONNECTION=10.0.0.1 22 10.0.0.2 22"
+hid_idle 5; clients "$((NOW - 3600))"
+run_hook "$FIXTURES/main-2-tools.jsonl"
+assert "attached over SSH → HID ignored, stale client is away" zeph_called
+reset_probes; in_tmux; tmux_ssh "SSH_CONNECTION=10.0.0.1 22 10.0.0.2 22"
+hid_idle 9999; clients "$((NOW - 2))"
+run_hook "$FIXTURES/main-2-tools.jsonl"
+assert "attached over SSH → a fresh client is present despite HID idle" zeph_silent
 
 echo
 echo "[away: probes only run when quiet would otherwise be silent]"

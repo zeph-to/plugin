@@ -505,7 +505,11 @@ zeph_wrap_timeout() {
 #      client between sessions must not read as leaving.
 #   2. not over SSH and ioreg reports HIDIdleTime (macOS) → that decides, and
 #      nothing below runs: tmux activity only sees keys typed into tmux, so a
-#      user reading a browser would look idle to it.
+#      user reading a browser would look idle to it. Inside tmux, "over SSH"
+#      comes from the session environment (`show-environment`), which tmux
+#      refreshes on every attach — the process's own SSH_CONNECTION is frozen
+#      at server start and misreads a local server someone attached to over
+#      SSH, or the reverse.
 #   3. inside tmux → the newest client_activity, i.e. the last key any tmux
 #      client received (SSH and non-macOS hosts land here).
 # Anything else is present: an unreadable signal must never add a push.
@@ -523,7 +527,15 @@ zeph_is_away() {
         fi
     fi
 
-    if [ -z "${SSH_CONNECTION:-}" ] && command -v ioreg >/dev/null 2>&1; then
+    local over_ssh=0 ssh_var
+    if [ "$in_tmux" = 1 ] \
+        && ssh_var=$($(zeph_wrap_timeout tmux 2) show-environment SSH_CONNECTION 2>/dev/null); then
+        case "$ssh_var" in SSH_CONNECTION=*) over_ssh=1 ;; esac
+    elif [ -n "${SSH_CONNECTION:-}" ]; then
+        over_ssh=1
+    fi
+
+    if [ "$over_ssh" = 0 ] && command -v ioreg >/dev/null 2>&1; then
         # -r -k -d 1 prints just the IOHIDSystem node (~4 KB) instead of its
         # whole subtree (~380 KB) — measured 17 ms vs 29 ms on 2026-09-11.
         idle_ns=$($(zeph_wrap_timeout ioreg 2) -r -k HIDIdleTime -d 1 -c IOHIDSystem 2>/dev/null \

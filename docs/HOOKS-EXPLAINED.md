@@ -118,7 +118,10 @@ three signals, and the first that answers wins:
    is attached, someone is at a tmux terminal, so switching sessions doesn't
    count as leaving.
 2. Not over SSH and `ioreg` reports **`HIDIdleTime`** (macOS system-wide
-   input idle) → that alone decides. tmux only sees keys typed into tmux,
+   input idle) → that alone decides. Inside tmux, "over SSH" is read from the
+   session environment (`tmux show-environment SSH_CONNECTION`), which tmux
+   refreshes on each attach; the process's own `SSH_CONNECTION` dates from
+   server start. tmux only sees keys typed into tmux,
    so it would call a user reading a browser idle.
 3. Inside tmux → the newest **`client_activity`** across clients (covers SSH
    and non-macOS hosts).

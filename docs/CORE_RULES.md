@@ -27,7 +27,7 @@ Zeph lets the user drive this session from their phone. You are talking to a use
 ### Push Signal — steer the end-of-turn auto-push (Stop hook)
 
 <!-- zeph-branch: pushmode-quiet -->
-This project's push dial is **quiet**, so the Stop hook's heuristic never fires and the `skip`/`push` markers change nothing — `<!-- zeph: high -->` (an HTML comment, invisible in the terminal, stripped from the push body) is the whole channel. Emit it once on a completion the user is genuinely waiting on, never on routine work; it is ignored on a turn that already sent `zeph_ask`.
+This project's push dial is **quiet**, so the Stop hook's heuristic never fires and the `skip`/`push` markers change nothing — `<!-- zeph: high -->` (an HTML comment, invisible in the terminal, stripped from the push body) is the whole channel. Emit it once on a completion the user is genuinely waiting on, never on routine work; it is ignored on a turn that already sent `zeph_ask`. The hook also pushes on its own once the user has been away from the terminal for a while, so never emit `high` just to reach someone who left.
 <!-- /zeph-branch -->
 
 <!-- zeph-branch: pushmode-normal-loud -->
@@ -137,7 +137,7 @@ REMOTE begins the moment the user sends a message from their phone; from that tu
 2. Use `zeph_notify` only for: mid-task errors that block progress, explicit long-running progress milestones, or multi-session signals. Set `priority: "high"` for blockers. **Be proactive** — fire a blocker/error push the instant it happens, mid-task, not batched to the end of the response.
 
 <!-- zeph-branch: pushmode-quiet -->
-2b. **Push Signal** — this project's dial is **quiet** (the stock install has no dial, which means quiet), so the Stop hook's heuristic never fires and `skip`/`push` change nothing. `<!-- zeph: high -->` (an HTML comment; the hook strips it from the body) is the whole channel — emit it once on a genuinely important completion, never on routine work.
+2b. **Push Signal** — this project's dial is **quiet** (the stock install has no dial, which means quiet), so the Stop hook's heuristic never fires and `skip`/`push` change nothing. `<!-- zeph: high -->` (an HTML comment; the hook strips it from the body) is the whole channel — emit it once on a genuinely important completion, never on routine work. The hook also pushes on its own once the user has been away from the terminal for a while, so never emit `high` just to reach someone who left.
 <!-- /zeph-branch -->
 
 <!-- zeph-branch: pushmode-normal-loud -->
@@ -162,7 +162,7 @@ REMOTE begins the moment the user sends a message from their phone; from that tu
 |------|------|--------|
 | **1-2: Notify** | End of response with real work | Skip `zeph_notify` (auto-push) |
 | **1-2: Notify** | Mid-task error or long-running checkpoint | Call `zeph_notify` with `priority: "high"` — the instant it happens, not batched |
-| **Push Signal** | Steer the Stop-hook auto-push (NORMAL mode) | Emit `<!-- zeph: skip\|push\|high -->`; on a stock (quiet) install only `high` gets through |
+| **Push Signal** | Steer the Stop-hook auto-push (NORMAL mode) | Emit `<!-- zeph: skip\|push\|high -->`; on a stock (quiet) install only `high` gets through (the hook adds its own push while the user is away) |
 | **3: Questions** | REMOTE, and your response asks anything | FINAL tool call = `zeph_ask` |
 | **3: Questions** | NORMAL | `AskUserQuestion` or prose — no `zeph_ask` owed |
 | **4: After work** | REMOTE | End EVERY response with `zeph_ask` (Rule 9) |
