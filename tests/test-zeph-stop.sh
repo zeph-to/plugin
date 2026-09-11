@@ -41,6 +41,33 @@ printf '%s\n' "\$@" > "$WORK/last-call"
 EOF
 chmod +x "$STUB_DIR/zeph"
 
+# Presence probes (zeph_is_away) — stubbed on PATH ahead of the real ones so a
+# run never reads this machine's idle time or tmux server. Each stub logs its
+# call to $WORK/probe-calls and answers from a control file; a missing control
+# file makes it fail, which is how "no ioreg" / "no tmux server" is modelled.
+PROBE_DIR="$WORK/probe"
+mkdir -p "$PROBE_DIR"
+cat > "$PROBE_DIR/ioreg" <<EOF
+#!/bin/bash
+echo ioreg >> "$WORK/probe-calls"
+[ -f "$WORK/ioreg-idle-ns" ] || exit 1
+printf '    | |   "HIDIdleTime" = %s\n' "\$(cat "$WORK/ioreg-idle-ns")"
+EOF
+cat > "$PROBE_DIR/tmux" <<EOF
+#!/bin/bash
+echo "tmux \$*" >> "$WORK/probe-calls"
+case "\$1" in
+    list-clients)     f="$WORK/tmux-clients" ;;
+    show-environment) f="$WORK/tmux-ssh" ;;
+    *)                exit 1 ;;
+esac
+[ -f "\$f" ] || exit 1
+cat "\$f"
+EOF
+chmod +x "$PROBE_DIR/ioreg" "$PROBE_DIR/tmux"
+# Extra env for the next run_hook (e.g. TMUX=…, ZEPH_AWAY_SEC=…).
+HOOK_ENV=()
+
 # Assertion plumbing — collected + reported at the end.
 PASS=0; FAIL=0; TOTAL=0
 FAILED_TESTS=()
@@ -78,8 +105,9 @@ run_hook() {
     local project_dir="${2:-/tmp}"
     rm -f "$WORK/last-call"
     echo "{\"transcript_path\":\"$transcript\"}" \
-      | CLAUDE_PROJECT_DIR="$project_dir" PATH="$STUB_DIR:$PATH" \
-        XDG_STATE_HOME="$WORK/state" \
+      | env -u TMUX -u TMUX_PANE -u SSH_CONNECTION -u ZEPH_AWAY_SEC \
+        CLAUDE_PROJECT_DIR="$project_dir" PATH="$PROBE_DIR:$STUB_DIR:$PATH" \
+        XDG_STATE_HOME="$WORK/state" ${HOOK_ENV[@]+"${HOOK_ENV[@]}"} \
         bash "$HOOK_SCRIPT" 2>/dev/null
 }
 
@@ -405,6 +433,134 @@ date +%s > "$(remote_state_file)"
 run_hook "$FIXTURES/main-2-tools.jsonl"
 assert "REMOTE state untouched"  [ -f "$(remote_state_file)" ]
 rm -f "$(remote_state_file)"
+clear_pushmode
+
+# ── away: quiet still pushes when the user has left the terminal ───────────
+#
+# zeph_is_away probes, in order: inside tmux with no client attached anywhere
+# → away; a readable HIDIdleTime (not over SSH) decides alone; otherwise, inside
+# tmux, the newest client_activity. Probes that fail or are absent read as
+# present.
+
+NOW=$(date +%s)
+reset_probes() { rm -f "$WORK/probe-calls" "$WORK/ioreg-idle-ns" "$WORK/tmux-clients" "$WORK/tmux-ssh"; HOOK_ENV=(); }
+tmux_ssh()     { printf '%s\n' "$1" > "$WORK/tmux-ssh"; }
+probes_ran()   { [ -s "$WORK/probe-calls" ]; }
+in_tmux()      { HOOK_ENV+=("TMUX=/tmp/tmux-test/default,1,0" "TMUX_PANE=%1"); }
+clients()      { printf '%s\n' "$@" > "$WORK/tmux-clients"; }
+hid_idle()     { printf '%s' "$(( $1 * 1000000000 ))" > "$WORK/ioreg-idle-ns"; }
+priority_high() { [ -f "$WORK/last-call" ] && grep -qx -- "--priority" "$WORK/last-call"; }
+
+set_pushmode quiet
+
+echo
+echo "[away: no probe answers — present, quiet stays silent]"
+reset_probes
+run_hook "$FIXTURES/main-2-tools.jsonl"
+assert "silent when presence cannot be read"  zeph_silent
+
+echo
+echo "[away: HID idle past the threshold — push at normal priority]"
+reset_probes; hid_idle 400
+run_hook "$FIXTURES/main-2-tools.jsonl"
+assert     "push fired"                       zeph_called
+assert_not "not escalated to high"            priority_high
+
+echo
+echo "[away: HID idle below the threshold — silent]"
+reset_probes; hid_idle 5
+run_hook "$FIXTURES/main-2-tools.jsonl"
+assert "silent while the user is typing"      zeph_silent
+
+echo
+echo "[away: a read-only turn still pushes when away (user decision)]"
+reset_probes; hid_idle 400
+run_hook "$FIXTURES/main-readonly-only.jsonl"
+assert "read-only turn pushes"                zeph_called
+
+echo
+echo "[away: ZEPH_AWAY_SEC tunes the threshold, 0 disables]"
+reset_probes; hid_idle 100; HOOK_ENV+=("ZEPH_AWAY_SEC=60")
+run_hook "$FIXTURES/main-2-tools.jsonl"
+assert "100s idle is away at a 60s threshold" zeph_called
+reset_probes; hid_idle 100000; HOOK_ENV+=("ZEPH_AWAY_SEC=0")
+run_hook "$FIXTURES/main-2-tools.jsonl"
+assert     "0 disables away detection"        zeph_silent
+assert_not "0 does not even probe"            probes_ran
+reset_probes; hid_idle 400; HOOK_ENV+=("ZEPH_AWAY_SEC=soon")
+run_hook "$FIXTURES/main-2-tools.jsonl"
+assert "a non-numeric threshold falls back to 300s" zeph_called
+reset_probes; hid_idle 200; HOOK_ENV+=("ZEPH_AWAY_SEC=soon")
+run_hook "$FIXTURES/main-2-tools.jsonl"
+assert "…so 200s is still present"            zeph_silent
+reset_probes; hid_idle 400; HOOK_ENV+=("ZEPH_AWAY_SEC=99999999999999999999")
+run_hook "$FIXTURES/main-2-tools.jsonl"
+assert "an overflowing threshold falls back to 300s" zeph_called
+
+echo
+echo "[away: in tmux with no client attached anywhere — away]"
+reset_probes; in_tmux; : > "$WORK/tmux-clients"; hid_idle 1
+run_hook "$FIXTURES/main-2-tools.jsonl"
+assert "detached tmux server pushes even with fresh HID input" zeph_called
+
+echo
+echo "[away: in tmux but the server does not answer — present, not detached]"
+reset_probes; in_tmux
+run_hook "$FIXTURES/main-2-tools.jsonl"
+assert "a failed list-clients is not an empty one" zeph_silent
+
+echo
+echo "[away: readable HID wins over a stale tmux client (user in another app)]"
+reset_probes; in_tmux; clients "$((NOW - 3600))"; hid_idle 5
+run_hook "$FIXTURES/main-2-tools.jsonl"
+assert "silent — HID says present"            zeph_silent
+
+echo
+echo "[away: no HID (non-macOS) — tmux activity decides]"
+reset_probes; in_tmux; clients "$((NOW - 3600))"
+run_hook "$FIXTURES/main-2-tools.jsonl"
+assert "stale client → away"                  zeph_called
+
+echo
+echo "[away: over SSH the local HID is ignored, tmux activity decides]"
+reset_probes; in_tmux; HOOK_ENV+=("SSH_CONNECTION=10.0.0.1 22 10.0.0.2 22"); hid_idle 5
+clients "$((NOW - 3600))" "$((NOW - 7200))"
+run_hook "$FIXTURES/main-2-tools.jsonl"
+assert "stale newest client → away"           zeph_called
+reset_probes; in_tmux; HOOK_ENV+=("SSH_CONNECTION=10.0.0.1 22 10.0.0.2 22"); hid_idle 9999
+clients "$((NOW - 3600))" "$((NOW - 2))"
+run_hook "$FIXTURES/main-2-tools.jsonl"
+assert "one fresh client → present"           zeph_silent
+
+echo
+echo "[away: inside tmux the session environment decides SSH, not the frozen process env]"
+reset_probes; in_tmux; HOOK_ENV+=("SSH_CONNECTION=10.0.0.1 22 10.0.0.2 22"); tmux_ssh "-SSH_CONNECTION"
+hid_idle 5; clients "$((NOW - 3600))"
+run_hook "$FIXTURES/main-2-tools.jsonl"
+assert "attached locally (tmux unset it) → HID decides, present" zeph_silent
+reset_probes; in_tmux; tmux_ssh "SSH_CONNECTION=10.0.0.1 22 10.0.0.2 22"
+hid_idle 5; clients "$((NOW - 3600))"
+run_hook "$FIXTURES/main-2-tools.jsonl"
+assert "attached over SSH → HID ignored, stale client is away" zeph_called
+reset_probes; in_tmux; tmux_ssh "SSH_CONNECTION=10.0.0.1 22 10.0.0.2 22"
+hid_idle 9999; clients "$((NOW - 2))"
+run_hook "$FIXTURES/main-2-tools.jsonl"
+assert "attached over SSH → a fresh client is present despite HID idle" zeph_silent
+
+echo
+echo "[away: probes only run when quiet would otherwise be silent]"
+reset_probes; hid_idle 400
+run_hook "$FIXTURES/main-marker-high.jsonl"
+assert_not "high marker needs no probe"       probes_ran
+set_pushmode normal
+reset_probes; hid_idle 400
+run_hook "$FIXTURES/main-2-tools.jsonl"
+assert_not "normal mode never probes"         probes_ran
+set_pushmode loud
+reset_probes; hid_idle 400
+run_hook "$FIXTURES/main-1-tool.jsonl"
+assert_not "loud mode never probes"           probes_ran
+reset_probes
 clear_pushmode
 
 # ── summary ────────────────────────────────────────────────────────────────

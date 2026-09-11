@@ -92,10 +92,11 @@ echo $ZEPH_API_KEY
 - Fires after every Claude Code response
 - Decides whether to push using a layered gate (most-specific first):
   1. **Muted** (`/zeph-mute`) → always silent
-  2. **Push mode** (user dial): `/zeph-quiet` → push only on a `high` marker;
-     `/zeph-loud` → push every turn; `/zeph-normal` (default) → fall through.
+  2. **Push mode** (user dial): `/zeph-quiet` (default) → push only on a `high`
+     marker, or when the user is away from the terminal (see **Away detection**
+     below); `/zeph-loud` → push every turn; `/zeph-normal` → fall through.
      Read from this project's dial file, else the machine-wide default written
-     by `--global` (e.g. `/zeph-quiet --global`), else normal
+     by `--global` (e.g. `/zeph-quiet --global`), else quiet
   3. **Push Signal marker** the model may emit in its response —
      `<!-- zeph: skip -->` suppress, `<!-- zeph: push -->` force, `<!-- zeph: high -->`
      force + high priority (the marker is stripped from the push body)
@@ -103,6 +104,32 @@ echo $ZEPH_API_KEY
      read-only (Read/Grep/Glob); otherwise stay silent (avoids exploration spam)
 - Skips notification if the response already sent a `zeph_ask`/`zeph_prompt`
   (that already notified — no double-push; a `push`/`high` marker can't override this)
+
+**Away detection (quiet only):**
+
+Quiet silences routine pushes because the user is watching the pane. When
+they have walked away, nobody is, so the hook still sends the completion push
+(normal priority; `skip` and the read-only floor don't apply, since for an away
+user the turn ending is itself the news). `zeph_is_away` in `hooks/gate.sh`
+decides, and runs only on a quiet turn with no `high` marker (~30 ms). It checks
+three signals, and the first that answers wins:
+
+1. Inside tmux with **no client attached to the server** → away. If any client
+   is attached, someone is at a tmux terminal, so switching sessions doesn't
+   count as leaving.
+2. Not over SSH and `ioreg` reports **`HIDIdleTime`** (macOS system-wide
+   input idle) → that alone decides. Inside tmux, "over SSH" is read from the
+   session environment (`tmux show-environment SSH_CONNECTION`), which tmux
+   refreshes on each attach; the process's own `SSH_CONNECTION` dates from
+   server start. tmux only sees keys typed into tmux,
+   so it would call a user reading a browser idle.
+3. Inside tmux → the newest **`client_activity`** across clients (covers SSH
+   and non-macOS hosts).
+
+Anything unreadable counts as present. The threshold is `ZEPH_AWAY_SEC`
+(default `300`, `0` turns detection off, and a non-number falls back to
+the default). Set it in the environment the agent runs in. The same probe
+runs in `zeph notify --auto` (`cli/src/presence.ts`) for the other agents' hooks.
 
 **When it runs:**
 - After every response Claude makes

@@ -64,8 +64,9 @@ fi
 Report the result in your own words:
 - `MUTED` → notifications are muted for this project; `/zeph-unmute` re-enables them.
 - `ACTIVE` → notifications are active; `/zeph-mute` silences them.
-- `PUSH MODE: quiet` → only high-priority pushes reach them. This is the
-  shipped default, so it is what a project with no dial reports.
+- `PUSH MODE: quiet` → only high-priority pushes reach them, plus a completion
+  push when they are away from the terminal. This is the shipped default, so it
+  is what a project with no dial reports.
 - `PUSH MODE: normal` → the per-turn heuristic decides (push on real work,
   silent on read-only). Set with `/zeph-normal`.
 - `PUSH MODE: loud` → every turn pushes; `/zeph-normal` turns it down.

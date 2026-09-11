@@ -39,11 +39,12 @@ record() {
     fi
 }
 
-# One compact line per vector: name<TAB>tool<TAB>nonreadonly<TAB>asked<TAB>marker<TAB>mode<TAB>expected
+# One compact line per vector: name<TAB>tool<TAB>nonreadonly<TAB>asked<TAB>marker<TAB>mode<TAB>away<TAB>expected
 # alreadyAsked is a boolean in the JSON contract; the bash function takes the
-# per-turn count, so true → 1, false → 0.
-while IFS=$'\t' read -r name tool nonreadonly asked marker mode expected; do
-    record "$name" "$expected" "$(zeph_gate_decide "$tool" "$nonreadonly" "$asked" "$marker" "$mode")"
+# per-turn count, so true → 1, false → 0. away is optional in the JSON (absent
+# = false, as on the TS side) and is a 0/1 flag here.
+while IFS=$'\t' read -r name tool nonreadonly asked marker mode away expected; do
+    record "$name" "$expected" "$(zeph_gate_decide "$tool" "$nonreadonly" "$asked" "$marker" "$mode" "$away")"
 done < <(jq -r '.[] |
     [ .name,
       (.input.toolCount | tostring),
@@ -51,6 +52,7 @@ done < <(jq -r '.[] |
       (if .input.alreadyAsked then "1" else "0" end),
       .input.marker,
       .input.pushMode,
+      (if .input.away then "1" else "0" end),
       (if .expect.push then "push \(.expect.priority)" else "silent" end)
     ] | @tsv' "$VECTORS")
 
@@ -69,6 +71,10 @@ record "an empty mode argument is normal" \
     "push normal" "$(zeph_gate_decide 2 1 0 none "")"
 record "an unrecognised mode is normal (and its floors still apply)" \
     silent "$(zeph_gate_decide 1 1 0 none banana)"
+record "away is the literal flag 1 — 'true' is present, like decidePush's away !== true" \
+    silent "$(zeph_gate_decide 2 1 0 none quiet true)"
+record "an empty away argument is present" \
+    silent "$(zeph_gate_decide 2 1 0 none quiet "")"
 
 # ── zeph_read_pushmode — where the shipped default actually lives ───────────
 #

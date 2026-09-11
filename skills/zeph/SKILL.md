@@ -63,7 +63,7 @@ Override the Stop hook's end-of-turn push for the current turn by emitting ONE H
 - `<!-- zeph: push -->` — force a push the heuristic would skip (small but important action, e.g. a force-push).
 - `<!-- zeph: high -->` — force a high-priority push (important completion).
 
-No marker → the heuristic: silent if <2 tools or all read-only (Read/Grep/Glob), else push. **The user's push-mode dial outranks all of it, and an install with no dial is quiet** — there the heuristic never runs and only `high` gets through, so `high` is how an important completion still reaches them (and why a `high` on routine work is the noise quiet exists to remove). Ignored on any turn that already sent `zeph_ask` (no effect in REMOTE). See CORE_RULES.md → "Push Signal".
+No marker → the heuristic: silent if <2 tools or all read-only (Read/Grep/Glob), else push. **The user's push-mode dial outranks all of it, and an install with no dial is quiet** — there the heuristic never runs and only `high` gets through (the hook still pushes on its own once the user has stepped away from the terminal), so `high` is how an important completion still reaches them (and why a `high` on routine work is the noise quiet exists to remove). Ignored on any turn that already sent `zeph_ask` (no effect in REMOTE). See CORE_RULES.md → "Push Signal".
 
 ### zeph_ask (requires ZEPH_HOOK_ID) — Preferred
 Ask the user with quick-reply buttons AND a text input field combined. Blocks until response or timeout.
