@@ -10,12 +10,14 @@
 # to one that isn't mirrored in the other fails a build. Edit semantics ONLY
 # together with the vectors.
 #
-# zeph_gate_decide <tool_count> <nonreadonly_count> <already_asked> <marker> <pushmode>
+# zeph_gate_decide <tool_count> <nonreadonly_count> <already_asked> <marker> <pushmode> [away]
 #   tool_count        — total tool_use blocks this turn
 #   nonreadonly_count — tools that are NOT read-only (Read/Grep/Glob)
 #   already_asked     — count of zeph_ask/zeph_prompt this turn (>0 = notified)
 #   marker            — skip | push | high | anything else = none
 #   pushmode          — quiet | loud | anything else (incl. missing) = normal
+#   away              — 1 = the user is away from the terminal (zeph_is_away);
+#                       anything else (incl. missing) = present
 # Prints exactly one of: "push high" | "push normal" | "silent".
 #
 # This function decides NOTHING about what an install with no dial gets — that
@@ -27,12 +29,12 @@
 #   1. already_asked wins over EVERYTHING — even loud (dedup beats the dial).
 #   2. priority is high iff marker=high, decided BEFORE the mode switch, so
 #      quiet+high and loud+high both push at high priority.
-#   3. quiet → only a high marker pushes; loud → always push; normal → marker
+#   3. quiet → a high marker or an away user pushes; loud → always push; normal → marker
 #      overrides the heuristic (skip → silent, push/high → push), no marker →
 #      push iff tool_count ≥ 2 AND nonreadonly_count > 0 (B1 read-only floor).
 zeph_gate_decide() {
     local tool_count="${1:-0}" nonreadonly_count="${2:-0}" already_asked="${3:-0}"
-    local marker="${4:-none}" pushmode="${5:-normal}"
+    local marker="${4:-none}" pushmode="${5:-normal}" away="${6:-0}"
 
     [ "$already_asked" -gt 0 ] 2>/dev/null && { echo "silent"; return 0; }
 
@@ -41,7 +43,7 @@ zeph_gate_decide() {
 
     case "$pushmode" in
         quiet)
-            [ "$marker" = high ] || { echo "silent"; return 0; }
+            [ "$marker" = high ] || [ "$away" = 1 ] || { echo "silent"; return 0; }
             ;;
         loud) : ;;
         *)
