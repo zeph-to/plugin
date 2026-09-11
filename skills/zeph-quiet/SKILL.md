@@ -2,7 +2,8 @@
 name: zeph-quiet
 description: >
   Set Zeph to QUIET push mode — only high-priority pushes (blockers and `high`
-  Push Signals) reach you; routine completion pushes are suppressed. Applies to
+  Push Signals) reach you; routine completion pushes are suppressed while you
+  are at the terminal, and still sent once you step away. Applies to
   this project, or to every project with `--global`. Quiet is already the shipped
   default, so this is mainly for undoing /zeph-normal or /zeph-loud. Use
   /zeph-normal for a push per working turn, /zeph-loud for every turn,
@@ -47,7 +48,9 @@ printf 'quiet' > "$STATE_DIR/pushmode-default"
 ```
 
 Then confirm to the user, in your own words: only high-priority pushes (blockers
-and `high` Push Signals) will arrive — routine completion pushes are suppressed.
+and `high` Push Signals) will arrive — routine completion pushes are suppressed
+while they are at the terminal, and still sent when they have been away for
+`ZEPH_AWAY_SEC` (default 300 s).
 Say which scope it applied to (this project vs every project). `/zeph-normal`
 turns per-turn pushes back on, `/zeph-loud` pushes every turn, `/zeph-mute`
 silences everything. A per-project dial always wins over the global default.

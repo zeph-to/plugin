@@ -488,3 +488,50 @@ zeph_wrap_timeout() {
         echo "$1"
     fi
 }
+
+# ── Presence: is the user away from the terminal? ────────────────────────────
+#
+# zeph_is_away — rc 0 when the user looks away, rc 1 when present or when
+# presence cannot be read. The quiet dial silences routine pushes because the
+# user is watching the pane; an away user is not, so the Stop hook passes this
+# to zeph_gate_decide as `away`.
+#
+# Threshold: ZEPH_AWAY_SEC seconds (default 300, `0` disables, anything that is
+# not a whole number of at most 9 digits falls back to the default — longer ones
+# would overflow `[ -gt ]`). Probes, first answer wins:
+#   1. inside tmux and no client attached to the server at all → away. Any
+#      attached client means someone is at a tmux terminal — switching the one
+#      client between sessions must not read as leaving.
+#   2. not over SSH and ioreg reports HIDIdleTime (macOS) → that decides, and
+#      nothing below runs: tmux activity only sees keys typed into tmux, so a
+#      user reading a browser would look idle to it.
+#   3. inside tmux → the newest client_activity, i.e. the last key any tmux
+#      client received (SSH and non-macOS hosts land here).
+# Anything else is present: an unreadable signal must never add a push.
+zeph_is_away() {
+    local threshold="${ZEPH_AWAY_SEC:-300}"
+    case "$threshold" in ''|*[!0-9]*|??????????*) threshold=300 ;; esac
+    [ "$threshold" -gt 0 ] || return 1
+
+    local tmux_cmd="" activity="" idle_ns=""
+    if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
+        tmux_cmd=$(zeph_wrap_timeout tmux 2)
+        # rc ≠ 0 = no server answered; an empty list = a server with no clients.
+        activity=$($tmux_cmd list-clients -F '#{client_activity}' 2>/dev/null) || tmux_cmd=""
+        [ -n "$tmux_cmd" ] && [ -z "$activity" ] && return 0
+    fi
+
+    if [ -z "${SSH_CONNECTION:-}" ] && command -v ioreg >/dev/null 2>&1; then
+        idle_ns=$($(zeph_wrap_timeout ioreg 2) -c IOHIDSystem 2>/dev/null | awk '/HIDIdleTime/ {print $NF; exit}')
+        case "$idle_ns" in
+            ''|*[!0-9]*) ;;
+            *) [ $((idle_ns / 1000000000)) -ge "$threshold" ]; return ;;
+        esac
+    fi
+
+    [ -n "$tmux_cmd" ] || return 1
+    local newest
+    newest=$(printf '%s\n' "$activity" | grep -E '^[0-9]+$' | sort -n | tail -n 1)
+    [ -n "$newest" ] || return 1
+    [ $(( $(date +%s) - newest )) -ge "$threshold" ]
+}

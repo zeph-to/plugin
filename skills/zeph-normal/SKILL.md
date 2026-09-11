@@ -29,7 +29,8 @@ Scope: **this project**, unless the user passed `--global` — then it becomes t
 machine-wide default for every project that has no dial of its own.
 
 > Normal is no longer the shipped default. An install with no dial anywhere is
-> **quiet**: only high-priority pushes arrive from the Stop hook. This skill is
+> **quiet**: only high-priority pushes arrive from the Stop hook while the user
+> is at the terminal. This skill is
 > how a user opts back into a push on every working turn.
 
 Project (default) — run this bash command:

@@ -111,12 +111,12 @@ Pushes fire for **every** Claude Code session, not only ones launched with `zeph
 /zeph-unmute    Re-enable them
 /zeph-status    Show current state (mute + push mode, and where it came from)
 
-/zeph-quiet     Only high-priority pushes reach you  ← the default
+/zeph-quiet     Only high-priority pushes, plus completions while you're away  ← the default
 /zeph-loud      Push on every turn
 /zeph-normal    Push on every turn that did real work, quiet on reads
 ```
 
-**Quiet is the default.** An install with no dial pushes only on high-priority signals, so a long session doesn't turn into a stream of per-turn notifications. What still reaches you: questions (the agent asking you something is never suppressed) and the completion push when a session has been idle for five minutes. If you'd rather hear about every working turn, `/zeph-normal` — that was the old default.
+**Quiet is the default.** An install with no dial pushes only on high-priority signals, so a long session doesn't turn into a stream of per-turn notifications. What still reaches you: questions (the agent asking you something is never suppressed), and the completion push once you have stepped away from the terminal — no input for `ZEPH_AWAY_SEC` seconds (default 300), or no tmux client attached ([details](docs/HOOKS-EXPLAINED.md)). A session you drove from your phone also gets the server's completion push after five minutes idle. If you'd rather hear about every working turn, `/zeph-normal` — that was the old default.
 
 Add `--global` to any of the three dials to set the **machine-wide default** for every project that has no dial of its own. A per-project dial always outranks it, so `/zeph-normal` opts a single project back into per-turn pushes and `/zeph-normal --global` does it everywhere.
 

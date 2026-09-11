@@ -37,7 +37,8 @@ plugin behaves exactly as before unless the model speaks up.
 ### Push Mode
 A **user**-set session preference that dials the Stop-hook Push volume, sitting one
 level above the model's per-turn Push Signal. Three modes — **normal** (the volume
-heuristic decides), **quiet** (only high-priority pushes survive), **loud** (every
+heuristic decides), **quiet** (only high-priority pushes survive, plus a completion
+push when the user is **away** from the terminal), **loud** (every
 turn pushes) — set via `/zeph-quiet` / `/zeph-loud` / `/zeph-normal`, mirroring the
 mute mechanism. Each dial also takes `--global`, writing the hash-less
 `pushmode-default` that every project without its own dial falls back to; a

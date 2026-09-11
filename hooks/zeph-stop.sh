@@ -7,7 +7,8 @@
 #   - jq is not installed
 #   - the response already sent a zeph_ask / zeph_prompt (avoid duplicates)
 #   - a `skip` marker, or the no-marker heuristic above, says so
-#   - the user set /zeph-quiet (and this turn has no `high` marker)
+#   - the user set /zeph-quiet (and this turn has no `high` marker, and the
+#     user is at the terminal — see zeph_is_away)
 # The user can also force a push every turn with /zeph-loud.
 
 command -v jq >/dev/null 2>&1 || exit 0
@@ -21,7 +22,8 @@ MUTE_HASH=$(printf '%s' "${CLAUDE_PROJECT_DIR:-$(pwd)}" | cksum | cut -d' ' -f1)
 zeph_state_present muted "$MUTE_HASH" >/dev/null && exit 0
 
 # User push-mode dial (a level above the model's per-turn Push Signal marker):
-#   quiet — suppress every auto-push except a `high` marker
+#   quiet — suppress every auto-push except a `high` marker, or a user who is
+#           away from the terminal (zeph_is_away in gate.sh)
 #   loud  — push every turn, overriding skip / <2-tool / read-only
 #   normal — the marker + heuristic gate decides
 # No dial at all → quiet, the shipped default. Set via the
@@ -200,7 +202,13 @@ EXIT_RE='<!--[[:blank:]]*zeph:[[:blank:]]*exit[[:blank:]]*-->'
 # via gate-vectors.json, with the CLI's TS twin. ALREADY_ASKED already
 # fast-exited above (before the marker wait, for latency); it is still passed
 # through so the sourced function honors the full contract on its own.
-VERDICT=$(zeph_gate_decide "$TOOL_COUNT" "$NONREADONLY_COUNT" "$ALREADY_ASKED" "${MARKER:-none}" "$PUSHMODE")
+#
+# Presence is probed only where it can change the answer: quiet with no `high`
+# marker is the one path that is otherwise silent. Every other turn skips the
+# ~40 ms of tmux/ioreg calls.
+AWAY=0
+[ "$PUSHMODE" = quiet ] && [ "$MARKER" != high ] && zeph_is_away && AWAY=1
+VERDICT=$(zeph_gate_decide "$TOOL_COUNT" "$NONREADONLY_COUNT" "$ALREADY_ASKED" "${MARKER:-none}" "$PUSHMODE" "$AWAY")
 [ "$VERDICT" = silent ] && exit 0
 PRIORITY=""
 [ "$VERDICT" = "push high" ] && PRIORITY="high"
