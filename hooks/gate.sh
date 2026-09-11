@@ -514,25 +514,32 @@ zeph_is_away() {
     case "$threshold" in ''|*[!0-9]*|??????????*) threshold=300 ;; esac
     [ "$threshold" -gt 0 ] || return 1
 
-    local tmux_cmd="" activity="" idle_ns=""
+    local in_tmux=0 activity="" idle_ns=""
     if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
-        tmux_cmd=$(zeph_wrap_timeout tmux 2)
         # rc ≠ 0 = no server answered; an empty list = a server with no clients.
-        activity=$($tmux_cmd list-clients -F '#{client_activity}' 2>/dev/null) || tmux_cmd=""
-        [ -n "$tmux_cmd" ] && [ -z "$activity" ] && return 0
+        if activity=$($(zeph_wrap_timeout tmux 2) list-clients -F '#{client_activity}' 2>/dev/null); then
+            [ -z "$activity" ] && return 0
+            in_tmux=1
+        fi
     fi
 
     if [ -z "${SSH_CONNECTION:-}" ] && command -v ioreg >/dev/null 2>&1; then
-        idle_ns=$($(zeph_wrap_timeout ioreg 2) -c IOHIDSystem 2>/dev/null | awk '/HIDIdleTime/ {print $NF; exit}')
+        # -r -k -d 1 prints just the IOHIDSystem node (~4 KB) instead of its
+        # whole subtree (~380 KB) — measured 17 ms vs 29 ms on 2026-09-11.
+        idle_ns=$($(zeph_wrap_timeout ioreg 2) -r -k HIDIdleTime -d 1 -c IOHIDSystem 2>/dev/null \
+            | awk '/HIDIdleTime/ {print $NF; exit}')
         case "$idle_ns" in
             ''|*[!0-9]*) ;;
             *) [ $((idle_ns / 1000000000)) -ge "$threshold" ]; return ;;
         esac
     fi
 
-    [ -n "$tmux_cmd" ] || return 1
-    local newest
-    newest=$(printf '%s\n' "$activity" | grep -E '^[0-9]+$' | sort -n | tail -n 1)
+    [ "$in_tmux" = 1 ] || return 1
+    local line newest=""
+    while IFS= read -r line; do
+        case "$line" in ''|*[!0-9]*) continue ;; esac
+        { [ -z "$newest" ] || [ "$line" -gt "$newest" ]; } && newest=$line
+    done <<< "$activity"
     [ -n "$newest" ] || return 1
     [ $(( $(date +%s) - newest )) -ge "$threshold" ]
 }

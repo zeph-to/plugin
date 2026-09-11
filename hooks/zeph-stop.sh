@@ -205,7 +205,7 @@ EXIT_RE='<!--[[:blank:]]*zeph:[[:blank:]]*exit[[:blank:]]*-->'
 #
 # Presence is probed only where it can change the answer: quiet with no `high`
 # marker is the one path that is otherwise silent. Every other turn skips the
-# ~40 ms of tmux/ioreg calls.
+# ~30 ms of tmux/ioreg calls (measured 2026-09-11, bash startup included).
 AWAY=0
 [ "$PUSHMODE" = quiet ] && [ "$MARKER" != high ] && zeph_is_away && AWAY=1
 VERDICT=$(zeph_gate_decide "$TOOL_COUNT" "$NONREADONLY_COUNT" "$ALREADY_ASKED" "${MARKER:-none}" "$PUSHMODE" "$AWAY")

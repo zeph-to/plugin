@@ -111,7 +111,7 @@ Quiet silences routine pushes because the user is watching the pane. When
 they have walked away, nobody is, so the hook still sends the completion push
 (normal priority; `skip` and the read-only floor don't apply, since for an away
 user the turn ending is itself the news). `zeph_is_away` in `hooks/gate.sh`
-decides, and runs only on a quiet turn with no `high` marker (~40 ms). It checks
+decides, and runs only on a quiet turn with no `high` marker (~30 ms). It checks
 three signals, and the first that answers wins:
 
 1. Inside tmux with **no client attached to the server** → away. If any client
