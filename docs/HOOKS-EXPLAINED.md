@@ -125,7 +125,8 @@ three signals, and the first that answers wins:
 
 Anything unreadable counts as present. The threshold is `ZEPH_AWAY_SEC`
 (default `300`, `0` turns detection off, and a non-number falls back to
-the default). Set it in the environment the agent runs in.
+the default). Set it in the environment the agent runs in. The same probe
+runs in `zeph notify --auto` (`cli/src/presence.ts`) for the other agents' hooks.
 
 **When it runs:**
 - After every response Claude makes

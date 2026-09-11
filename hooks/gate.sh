@@ -494,7 +494,8 @@ zeph_wrap_timeout() {
 # zeph_is_away — rc 0 when the user looks away, rc 1 when present or when
 # presence cannot be read. The quiet dial silences routine pushes because the
 # user is watching the pane; an away user is not, so the Stop hook passes this
-# to zeph_gate_decide as `away`.
+# to zeph_gate_decide as `away`. The TS twin is cli/src/presence.ts isAway —
+# keep the probe order and fallbacks behaviorally in sync.
 #
 # Threshold: ZEPH_AWAY_SEC seconds (default 300, `0` disables, anything that is
 # not a whole number of at most 9 digits falls back to the default — longer ones
