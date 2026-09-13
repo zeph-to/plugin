@@ -82,31 +82,24 @@ A stock install has no dial, which means quiet; `/zeph-normal` and `/zeph-loud` 
 
 ### Sticky REMOTE mode (Rule 9)
 
-9. **The Ask Loop has two states: REMOTE and NORMAL.** REMOTE is sticky — every response ends with `zeph_ask` until the user exits. The state is kept for you in a file, so it survives context compaction and long sessions; you are told what it is rather than deriving it.
+9. **The Ask Loop has two states: REMOTE and NORMAL.** REMOTE is sticky — every response ends with `zeph_ask` until the user exits. The state lives in a file (it survives compaction and long sessions); you are told what it is, you do not derive it.
 
 #### State Detection
 
-- **`zeph_ask` results carry it** as `zephState: "REMOTE" | "NORMAL"`: any answer that is not a Done-like action id enters REMOTE, a Done-like id exits, and so does a timeout that fell back to one. A result with no `zephState` is an ask that timed out onto a safe fallback and changed nothing.
-- **Prompt-submit hooks say it**, where installed (this plugin, or the hooks `zeph setup` writes for Gemini/Codex): a remote-origin note on the turn a phone message arrives, and a note that the session has LEFT REMOTE on the first turn the user types at the terminal. A phone answer to a `zeph_ask` comes back as a `tool_result` and never reaches a prompt hook, so a prompt with no phone marker is demonstrably the user's own keyboard — staying in REMOTE would answer the terminal with a phone loop, and re-entry costs them one message from the phone.
-- **Neither one present → NORMAL.**
-
-**The one call left to you is free text**, because it is the one signal no hook can read: the server cannot tell "run the tests" from "thanks, that's it". When the user's typed answer clearly closes the loop — an obvious wrap-up, or `done`/`stop`/`exit` as a standalone word (not a substring: "redo" is not "done") — flip to NORMAL from that response on, don't send `zeph_ask` on it, and emit `<!-- zeph: exit -->` once so the hooks agree with you. Your own flip is what ends the loop; the marker is how you tell a hook that cannot read your mind, and it is separate from any push-volume marker, which says nothing about the mode.
+- **`zeph_ask` results carry it** as `zephState: "REMOTE" | "NORMAL"`: a non-Done answer enters REMOTE; a Done-like id, or a timeout that fell back to one, exits. No `zephState` = a timed-out ask that changed nothing.
+- **Prompt-submit hooks say it**, where installed: a remote-origin note on the turn a phone message arrives, and a LEFT-REMOTE note on the first prompt typed at the terminal. A phone answer to a `zeph_ask` returns as a `tool_result`, never through a prompt hook — so a prompt with no phone marker is the user's own keyboard, and staying in REMOTE would answer the terminal with a phone loop.
+- **Neither present → NORMAL.**
+- **Free text is the one call left to you** — no hook can tell "run the tests" from "thanks, that's it". A clear wrap-up, or `done`/`stop`/`exit` as a standalone word ("redo" is not "done"), flips you to NORMAL from that response on: no `zeph_ask` on it, and emit `<!-- zeph: exit -->` once so the hooks agree. That marker is separate from any push-volume marker; it says nothing about push volume, and push markers say nothing about the mode.
 
 #### Behavior in REMOTE (sticky, zeph_ask MANDATORY)
 
-End EVERY response with `zeph_ask`, carrying 2–4 `actions` (the next-step candidates as buttons) plus a Done-like `fallback` — never a destructive one, since an unanswered ask resolves to it — a text-only ask is only for inherently free-form answers. Non-negotiable while in REMOTE, independent of whether the work was substantial or routine.
+End EVERY response with `zeph_ask` — 2–4 `actions` (the next-step candidates) plus a Done-like `fallback` (never a destructive one: an unanswered ask resolves to it), `timeout` 300–600 s so silence exits quietly instead of chaining pushes at a user who stepped away. A text-only ask is only for inherently free-form answers. Non-negotiable in REMOTE, substantial work or not.
 
-Set `timeout` 300–600 s so silence degrades cleanly: an unanswered ask exits the loop quietly — the server treats a Done-like fallback as an exit — instead of chaining more notifications at a user who stepped away.
-
-Four things leave REMOTE: a Done-like button (or a timeout that fell back to one), your own read of a free-text wrap-up, a prompt the user typed at the terminal, and — for a session nobody exited because it crashed — the state expiring.
+Four things leave REMOTE: a Done-like button (or a timeout onto one), your own read of a free-text wrap-up, a prompt typed at the terminal, and the state expiring after a crash nobody exited.
 
 #### Behavior in NORMAL (no zeph_ask is owed)
 
-The user is at the terminal — that is what NORMAL means. Nothing here obliges an ask:
-
-- Questions go to `AskUserQuestion` or plain prose. The Ask hook still pushes them to the user's device, so a question is never lost.
-- Completion is the Stop hook's push.
-- `zeph_ask` remains available when you actively want an answer from their device — it is not owed, and never as a way to mark a turn finished.
+The user is at the terminal. Questions go to `AskUserQuestion` or prose (the Ask hook still pushes them to the device); completion is the Stop hook's push; `zeph_ask` is available when you want an answer from their device — never as a way to mark a turn finished.
 
 REMOTE begins the moment the user sends a message from their phone; from that turn on, Rules 3, 4, 10 and 11 are in force.
 
@@ -175,5 +168,5 @@ REMOTE begins the moment the user sends a message from their phone; from that tu
 
 ---
 
-**Last updated**: 2026-08-18
+**Last updated**: 2026-09-13
 **Synced across**: plugin, CLAUDE.md, SKILL.md, cli/templates.ts (generated via cli/scripts/sync-from-plugin.mjs)
