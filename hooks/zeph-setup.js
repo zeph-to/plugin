@@ -17,7 +17,7 @@
 // emits that branch only:
 //
 //   muted        → three lines; the hooks are silent anyway
-//   no hookId    → one-way notify discipline; zeph_ask/prompt/input do not exist
+//   no hookId    → one-way notify discipline; zeph_ask does not exist
 //   REMOTE       → sticky REMOTE in full, no Push Signal (REMOTE ignores markers)
 //   NORMAL       → the default branch, with a two-line pointer to REMOTE
 //
@@ -189,7 +189,7 @@ const MUTED = `# Zeph — muted for this project
 
 Push notifications are muted here, so the Stop and Ask hooks stay silent. The \`zeph_*\` MCP tools still work, but do NOT call them unless the user explicitly asks.
 
-\`/zeph-unmute\` lifts it.`;
+\`/zeph-mode unmute\` lifts it.`;
 
 const oneWay = (pushmode) => {
     const body = coreRules.slice(coreRules.indexOf('## One-Way Mode'), coreRules.indexOf('## Environment Notes'))
@@ -257,6 +257,6 @@ const jqWarning =
     'Zeph shell hooks exit early: no pushes, and no remote-mode notes. Tell the user ' +
     'once: install with `brew install jq` (macOS) or `apt install jq` (Linux).';
 
-const mode = hookId ? 'two-way (notify + ask + prompt + input)' : 'one-way (notify only)';
+const mode = hookId ? 'two-way (notify + ask)' : 'one-way (notify only)';
 
 emit(`${rules}\n\nMode: ${mode}${hasJq ? '' : jqWarning}`);

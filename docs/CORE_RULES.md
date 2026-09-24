@@ -41,7 +41,7 @@ No marker → the heuristic: a turn that ran <2 tools, or whose tools are all re
 <!-- /zeph-branch -->
 
 <!-- zeph-doc-only -->
-A stock install has no dial, which means quiet; `/zeph-normal` and `/zeph-loud` change it. The SessionStart hook emits whichever block above matches this project's dial, so the injected rules never mention a dial the user is not on.
+A stock install has no dial, which means quiet; `/zeph-mode normal` and `/zeph-mode loud` change it. The SessionStart hook emits whichever block above matches this project's dial, so the injected rules never mention a dial the user is not on.
 <!-- /zeph-doc-only -->
 
 ### When zeph_ask is MANDATORY
@@ -56,7 +56,7 @@ A stock install has no dial, which means quiet; `/zeph-normal` and `/zeph-loud` 
 
     **In NORMAL, end with nothing.** The Stop hook's push is the completion signal. Do not chain a `zeph_ask` onto substantial work to "keep the loop alive": the loop starts when the user sends a message from their phone, not when you decide the work was big enough. `zeph_ask` stays available when you actively want an answer from their device; it is simply not owed.
 
-5. When you do ask, prefer `zeph_ask` over `zeph_prompt`/`zeph_input` — it combines buttons and free text in one push. **`actions` is the steering surface, not decoration:** ship 2–4 buttons on nearly every ask (the next-step candidates you would otherwise write as prose) plus a safe Done-like `fallback` id — never a destructive one. Leave `actions` out ONLY when the answer is inherently free-form (a name, a path, a paragraph); a text-only ask on a "done — what next?" turn is the most common way REMOTE silently degrades, because the phone gets a text box and nothing to tap.
+5. When you do ask, use `zeph_ask` — buttons and free text in one push. **`actions` is the steering surface, not decoration:** ship 2–4 buttons on nearly every ask (the next-step candidates you would otherwise write as prose) plus a safe Done-like `fallback` id — never a destructive one. Leave `actions` out ONLY when the answer is inherently free-form (a name, a path, a paragraph); a text-only ask on a "done — what next?" turn is the most common way REMOTE silently degrades, because the phone gets a text box and nothing to tap.
 
    ```
    zeph_ask({
@@ -113,7 +113,7 @@ REMOTE begins the moment the user sends a message from their phone; from that tu
 
 ### Mute
 
-12. If the user ran `/zeph-mute` for this project, the Stop and Ask hooks stay silent (driven by a per-project marker file that persists until `/zeph-unmute`). MCP tools still work but don't call them unless the user explicitly asks. `/zeph-unmute` lifts it. The user can also dial the auto-push volume without full silence: `/zeph-quiet` (only high-priority pushes, plus a completion push while the user is away from the terminal — this is what an install with no dial already does), `/zeph-loud` (push every turn), `/zeph-normal` (push on every turn that did real work). This is a project-level override above your per-turn Push Signal; each dial also takes `--global` to set the machine-wide default for projects with no dial of their own (per-project always wins). `/zeph-status` shows the current mode and which scope it came from. Mute overrides all of them.
+12. `/zeph-mode mute` silences the Stop and Ask hooks for this project until `/zeph-mode unmute`; MCP tools still work but are not called unless the user asks. The auto-push dial sits under it: `quiet` (the default — high-priority pushes, plus a completion push once the user is away), `normal` (every turn that did real work), `loud` (every turn), each settable per project or with `--global` as the default for projects without their own (per-project wins). It outranks your per-turn Push Signal; mute outranks everything. `/zeph-mode` alone shows what is in effect.
 
 ### Persistence
 
@@ -123,7 +123,7 @@ REMOTE begins the moment the user sends a message from their phone; from that tu
 
 ## One-Way Mode (without ZEPH_HOOK_ID)
 
-`ZEPH_HOOK_ID` is not set, so two-way (`zeph_ask` / `zeph_prompt` / `zeph_input`) is unavailable. Only `zeph_notify` works.
+`ZEPH_HOOK_ID` is not set, so two-way (`zeph_ask`) is unavailable. Only `zeph_notify` works.
 
 1. A Stop hook auto-notifies after responses with real work (≥2 tool calls). Do NOT call `zeph_notify` just to say "done" — it duplicates the auto-push.
 

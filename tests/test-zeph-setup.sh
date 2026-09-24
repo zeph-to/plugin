@@ -149,7 +149,7 @@ touch "$STATE/zeph/muted-$PROJECT_HASH"
 CTX=$(run_hook ZEPH_API_KEY=test-key ZEPH_HOOK_ID=test-hook)
 assert "under 400 chars"                       ctx_max_len 400
 assert "says it is muted"                      ctx_has "muted"
-assert "says how to lift it"                   ctx_has "/zeph-unmute"
+assert "says how to lift it"                   ctx_has "/zeph-mode unmute"
 assert_not "no ask rules"                      ctx_has "MANDATORY"
 state_reset
 

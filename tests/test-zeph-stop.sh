@@ -374,7 +374,7 @@ assert "and the normal heuristic still applies its floors" zeph_silent
 rm -f "$STUB_DIR/cksum"
 
 echo
-echo "[push mode: global default — /zeph-quiet --global]"
+echo "[push mode: global default — /zeph-mode quiet --global]"
 # `pushmode-default` is the machine-wide fallback, consulted only when the
 # project has no dial of its own (state dir or legacy /tmp).
 mkdir -p "$WORK/state/zeph"
@@ -383,7 +383,7 @@ run_hook "$FIXTURES/main-2-tools.jsonl"
 assert "global quiet suppresses a normal push"          zeph_silent
 run_hook "$FIXTURES/main-marker-high.jsonl"
 assert "global quiet still lets a high marker through"  zeph_called
-# A per-project dial outranks it — that's how /zeph-normal opts one project out.
+# A per-project dial outranks it — that's how /zeph-mode normal opts one project out.
 GLOBAL_PROJECT="$WORK/global-project"
 mkdir -p "$GLOBAL_PROJECT"
 GP_HASH=$(printf '%s' "$GLOBAL_PROJECT" | cksum | cut -d' ' -f1)

@@ -1,15 +1,13 @@
 ---
 name: zeph-config
 description: >
-  Set up Zeph in one command. Runs the CLI installer (browser sign-in,
-  credentials saved to ~/.zeph/config.json), then verifies with a test push.
-  No environment variables, no manual key copying.
+  Set up Zeph: install the CLI, sign in in the browser, verify with a test push.
 metadata:
   author: zeph-to
   version: "0.9.0"
   relatedSkills:
     - zeph
-    - zeph-status
+    - zeph-mode
   triggers:
     - zeph-config
     - setup zeph
