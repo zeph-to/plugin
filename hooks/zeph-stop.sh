@@ -111,7 +111,10 @@ def since_last_user:
 # ── Per-turn tool tallies (one jq pass) ──────────────────────────────────────
 # Three counts drive the gate, all derived from the same tool_use list, so a
 # single jq pass emits them as one "ask tools nonreadonly" tuple:
-#   ALREADY_ASKED     — zeph_ask this turn (a push already went out)
+#   ALREADY_ASKED     — zeph_ask this turn (a push already went out). Matched
+#                       by suffix: transcripts log the MCP-namespaced name
+#                       (mcp__plugin_zeph_zeph__zeph_ask, or mcp__zeph__zeph_ask
+#                       for a hand-registered server), never the bare one.
 #   TOOL_COUNT        — total tool_use blocks
 #   NONREADONLY_COUNT — tools that are NOT read-only (Read/Grep/Glob); a turn
 #                       with zero is exploration noise the B1 floor drops.
@@ -121,7 +124,7 @@ TAIL_CONTENT=$(read_tail)
 read ALREADY_ASKED TOOL_COUNT NONREADONLY_COUNT < <(printf '%s\n' "$TAIL_CONTENT" | jq -rs "$JQ_SINCE_USER"'
     since_last_user
     | [.[] | content_blocks[] | select(.type == "tool_use") | .name // ""] as $tools
-    | "\($tools | map(select(. == "zeph_ask")) | length) \($tools | length) \($tools | map(select(. != "Read" and . != "Grep" and . != "Glob")) | length)"
+    | "\($tools | map(select(test("(^|__)zeph_ask$"))) | length) \($tools | length) \($tools | map(select(. != "Read" and . != "Grep" and . != "Glob")) | length)"
 ' 2>/dev/null)
 ALREADY_ASKED=${ALREADY_ASKED:-0}
 TOOL_COUNT=${TOOL_COUNT:-0}
