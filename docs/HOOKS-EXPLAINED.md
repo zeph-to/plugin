@@ -34,8 +34,8 @@ The plugin installs 4 hooks that fire automatically on Claude Code events:
 | State | Injected | Size |
 |-------|----------|------|
 | No `ZEPH_API_KEY` | helper message suggesting `npx @zeph-to/cli setup` | ~250 B |
-| `/zeph-mute` marker for this project | three lines: hooks are silent, don't call the tools unless asked | ~220 B |
-| No hook id (`ZEPH_HOOK_ID` env or `hookId` in `~/.zeph/config.json`) | one-way notify discipline (`zeph_ask`/`prompt`/`input` do not exist) | ~1.3 KB |
+| `/zeph-mode mute` marker for this project | three lines: hooks are silent, don't call the tools unless asked | ~220 B |
+| No hook id (`ZEPH_HOOK_ID` env or `hookId` in `~/.zeph/config.json`) | one-way notify discipline (`zeph_ask` does not exist) | ~1.3 KB |
 | Sticky REMOTE live (`remote-active-<hash>`) | the sticky-REMOTE contract in full — Rules 1-3, 7-11, 13 (Rule 4 is subsumed by Rule 9 there) — and no Push Signal, since markers are ignored on a turn that already sent `zeph_ask` | ~7.4 KB |
 | Otherwise | the NORMAL branch: notify discipline, Push Signal, and what starts REMOTE. No ask rules — every one of them is REMOTE-scoped, so a session at the terminal never blocks on a phone answer | ~3.1–3.6 KB |
 
@@ -60,7 +60,7 @@ Any state read that fails resolves to the NORMAL branch, never back to
 {
   "hookSpecificOutput": {
     "hookEventName": "SessionStart",
-    "additionalContext": "# Zeph — Notification Rules (active every response)\n\n## NORMAL — the user is at the terminal\n\n...\n[the branch's sections from CORE_RULES.md]\n\nMode: two-way (notify + ask + prompt + input)"
+    "additionalContext": "# Zeph — Notification Rules (active every response)\n\n## NORMAL — the user is at the terminal\n\n...\n[the branch's sections from CORE_RULES.md]\n\nMode: two-way (notify + ask)"
   }
 }
 ```
@@ -91,18 +91,18 @@ echo $ZEPH_API_KEY
 **What it does:**
 - Fires after every Claude Code response
 - Decides whether to push using a layered gate (most-specific first):
-  1. **Muted** (`/zeph-mute`) → always silent
-  2. **Push mode** (user dial): `/zeph-quiet` (default) → push only on a `high`
+  1. **Muted** (`/zeph-mode mute`) → always silent
+  2. **Push mode** (user dial): `/zeph-mode quiet` (default) → push only on a `high`
      marker, or when the user is away from the terminal (see **Away detection**
-     below); `/zeph-loud` → push every turn; `/zeph-normal` → fall through.
+     below); `/zeph-mode loud` → push every turn; `/zeph-mode normal` → fall through.
      Read from this project's dial file, else the machine-wide default written
-     by `--global` (e.g. `/zeph-quiet --global`), else quiet
+     by `--global` (e.g. `/zeph-mode quiet --global`), else quiet
   3. **Push Signal marker** the model may emit in its response —
      `<!-- zeph: skip -->` suppress, `<!-- zeph: push -->` force, `<!-- zeph: high -->`
      force + high priority (the marker is stripped from the push body)
   4. **Volume heuristic** (no marker): push only if ≥ 2 tool calls AND not all
      read-only (Read/Grep/Glob); otherwise stay silent (avoids exploration spam)
-- Skips notification if the response already sent a `zeph_ask`/`zeph_prompt`
+- Skips notification if the response already sent a `zeph_ask`
   (that already notified — no double-push; a `push`/`high` marker can't override this)
 
 **Away detection (quiet only):**
@@ -153,7 +153,7 @@ The hook is smart about WHAT to count:
    - Checks for `${XDG_STATE_HOME:-~/.local/state}/zeph/muted-{hash}` (legacy
      `/tmp/zeph-muted-{hash}` still honored when owned by the current user)
    - Hash = `cksum(project-dir)`
-   - Result: `/zeph-mute` command silences notifications
+   - Result: `/zeph-mode mute` command silences notifications
 
 **Example execution flow:**
 
@@ -209,11 +209,11 @@ jq -r '.[] | select(.role=="assistant") | .message.content? // empty' \
 **Why sometimes silent:**
 - Tool count < 2, or all tools were read-only (Read/Grep/Glob), with no marker
 - The response emitted a `<!-- zeph: skip -->` Push Signal
-- Push mode is `/zeph-quiet` and the turn had no `high` marker — set for this
-  project, or inherited from a `/zeph-quiet --global` default (`/zeph-status`
+- Push mode is `/zeph-mode quiet` and the turn had no `high` marker — set for this
+  project, or inherited from a `/zeph-mode quiet --global` default (`/zeph-mode`
   says which)
 - jq not installed (hook exits early)
-- Project is muted (`/zeph-mute` was run)
+- Project is muted (`/zeph-mode mute` was run)
 - Mute file still exists (stale from previous session)
 - Response already sent a `zeph_ask` (Stop hook deduplicates)
 
@@ -412,7 +412,7 @@ TimelineEvent                            | Hook      | Output
 |-------|-------|-----|
 | No notifications at all | `jq` not installed | `brew install jq` (macOS) or `apt install jq` (Linux) |
 | Duplicate notifications | zeph_ask was called + Stop hook fired | Claude is following rules correctly; Ask loop working |
-| Notifications muted | `/zeph-mute` was run | Run `/zeph-unmute` to re-enable |
+| Notifications muted | `/zeph-mode mute` was run | Run `/zeph-mode unmute` to re-enable |
 | Question notifications missing | Claude didn't call AskUserQuestion | Check: is Claude asking plainly instead? (rule violation) |
 | Wrong project name in push | `CLAUDE_PROJECT_DIR` not set | Set env var or hooks use `git rev-parse --show-toplevel` |
 

@@ -5,12 +5,13 @@ description: >
   commit in a loop until the time budget runs out. Every decision goes through
   zeph_ask with a timeout fallback, so work never stalls on an absent user.
   Start ONLY on explicit user request (e.g. /zeph-auto 2h). Requires ZEPH_HOOK_ID.
+disable-model-invocation: true
 metadata:
   author: zeph-to
   version: "0.9.0"
   relatedSkills:
     - zeph
-    - zeph-status
+    - zeph-mode
     - zeph-config
   triggers:
     - zeph-auto
@@ -33,8 +34,8 @@ mode.
 
 - **`ZEPH_HOOK_ID` is set.** Without it there is no steering channel — refuse and
   point the user to `/zeph-config`.
-- **Not muted.** If `/zeph-status` reports MUTED, refuse: autonomous mode
-  without notifications is unattended work with no steering. Suggest `/zeph-unmute`.
+- **Not muted.** If `/zeph-mode` reports `NOTIFICATIONS: muted`, refuse: autonomous mode
+  without notifications is unattended work with no steering. Suggest `/zeph-mode unmute`.
 - **Explicit user invocation.** Never self-trigger this mode because a task
   "looks long". The user opts in with `/zeph-auto ...`.
 

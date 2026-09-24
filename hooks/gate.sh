@@ -13,7 +13,7 @@
 # zeph_gate_decide <tool_count> <nonreadonly_count> <already_asked> <marker> <pushmode> [away]
 #   tool_count        — total tool_use blocks this turn
 #   nonreadonly_count — tools that are NOT read-only (Read/Grep/Glob)
-#   already_asked     — count of zeph_ask/zeph_prompt this turn (>0 = notified)
+#   already_asked     — count of zeph_ask this turn (>0 = notified)
 #   marker            — skip | push | high | anything else = none
 #   pushmode          — quiet | loud | anything else (incl. missing) = normal
 #   away              — 1 = the user is away from the terminal (zeph_is_away);
@@ -163,7 +163,7 @@ ZEPH_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/zeph"
 # marker the listener writes and zeph-remote.sh consumes — see ADR-0002.)
 #
 # `pushmode` alone has a machine-wide default (`pushmode-default`, written by
-# `/zeph-quiet --global`), consulted last so a per-project dial always wins.
+# `/zeph-mode quiet --global`), consulted last so a per-project dial always wins.
 # `cksum` emits digits only, so `-default` can never collide with a real hash.
 # Mute is deliberately project-only: a global mute file would have no way to be
 # lifted for one project (presence, not content, is the signal), and a global

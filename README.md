@@ -51,7 +51,7 @@ Restart Claude Code — notifications start automatically. That's it. `zeph inst
 | Claude **asks you a question** | any `AskUserQuestion` |
 | A session **has been idle for five minutes** (it's done) | the session going quiet, not each turn |
 | Claude flags a turn as **important** | a `high` Push Signal on that response |
-| Claude **finishes real work**, every turn | only after `/zeph-normal` — see below |
+| Claude **finishes real work**, every turn | only after `/zeph-mode normal` — see below |
 
 These ride on hooks — shell commands that fire on Claude events, independent of whether the model "remembers" to notify you. Out of the box the per-turn push is off (`quiet`), so a long session pings you when it asks something and when it's actually finished, not thirty times along the way. They fire in **every** Claude Code session, not only ones launched with `zeph cc` — that command is the phone-control bridge, not the notification switch. Dial the volume any time, per project or machine-wide (see [Mute & Push Mode](#mute--push-mode)).
 
@@ -65,12 +65,10 @@ With a Hook ID configured (`zeph install` sets one up automatically), Claude end
 
 | Tool | What it shows | When Claude reaches for it |
 |------|---------------|----------------------------|
-| `zeph_ask` | buttons **+** text input | decisions, next steps, custom instructions |
-| `zeph_prompt` | 2–4 buttons | simple yes/no / pick-one |
-| `zeph_input` | text field | free-form input only |
+| `zeph_ask` | buttons **+** text input (text only without `actions`) | decisions, next steps, custom instructions, free-form input |
 | `zeph_notify` · `zeph_clipboard` · `zeph_file` | one-way push | when you explicitly ask |
 
-> `zeph_ask` / `zeph_prompt` / `zeph_input` need a Hook ID — issued for you during sign-in and saved to `~/.zeph/config.json`. No env vars.
+> `zeph_ask` needs a Hook ID — issued for you during sign-in and saved to `~/.zeph/config.json`. No env vars.
 
 ---
 
@@ -98,7 +96,7 @@ Hand Claude a time budget and walk away:
 
 Claude loops explore → plan → implement → verify → commit until the budget runs out, committing each verified unit on a work branch. Questions arrive on your phone as `zeph_ask` buttons **with a stated default** — answer to steer, or ignore and the run proceeds on the safe default after the timeout. Irreversible actions (push, deploy, delete) never happen on a timeout; they wait for an explicit tap. The run ends with a report of what was committed, skipped, and auto-defaulted — plus buttons to extend, review, or finish.
 
-Duration takes `2h`, `90m`, `1h30m`, or plain minutes (default `1h`). `/zeph-status` shows the remaining budget mid-run.
+Duration takes `2h`, `90m`, `1h30m`, or plain minutes (default `1h`). `/zeph-mode` shows the remaining budget mid-run.
 
 ---
 
@@ -107,18 +105,18 @@ Duration takes `2h`, `90m`, `1h30m`, or plain minutes (default `1h`). `/zeph-sta
 Pushes fire for **every** Claude Code session, not only ones launched with `zeph cc` — `zeph cc` is the remote-control bridge, not the notification switch. Silence or dial the volume, per project:
 
 ```
-/zeph-mute      Disable all notifications for this project
-/zeph-unmute    Re-enable them
-/zeph-status    Show current state (mute + push mode, and where it came from)
+/zeph-mode            Show current state (mute + push mode, and where it came from)
+/zeph-mode mute       Disable all notifications for this project
+/zeph-mode unmute     Re-enable them
 
-/zeph-quiet     Only high-priority pushes, plus completions while you're away  ← the default
-/zeph-loud      Push on every turn
-/zeph-normal    Push on every turn that did real work, quiet on reads
+/zeph-mode quiet      Only high-priority pushes, plus completions while you're away  ← the default
+/zeph-mode loud       Push on every turn
+/zeph-mode normal     Push on every turn that did real work, quiet on reads
 ```
 
-**Quiet is the default.** An install with no dial pushes only on high-priority signals, so a long session doesn't turn into a stream of per-turn notifications. What still reaches you: questions (the agent asking you something is never suppressed), and the completion push once you have stepped away from the terminal — no input for `ZEPH_AWAY_SEC` seconds (default 300), or no tmux client attached ([details](docs/HOOKS-EXPLAINED.md)). A session you drove from your phone also gets the server's completion push after five minutes idle. If you'd rather hear about every working turn, `/zeph-normal` — that was the old default.
+**Quiet is the default.** An install with no dial pushes only on high-priority signals, so a long session doesn't turn into a stream of per-turn notifications. What still reaches you: questions (the agent asking you something is never suppressed), and the completion push once you have stepped away from the terminal — no input for `ZEPH_AWAY_SEC` seconds (default 300), or no tmux client attached ([details](docs/HOOKS-EXPLAINED.md)). A session you drove from your phone also gets the server's completion push after five minutes idle. If you'd rather hear about every working turn, `/zeph-mode normal` — that was the old default.
 
-Add `--global` to any of the three dials to set the **machine-wide default** for every project that has no dial of its own. A per-project dial always outranks it, so `/zeph-normal` opts a single project back into per-turn pushes and `/zeph-normal --global` does it everywhere.
+Add `--global` to any of the three dials to set the **machine-wide default** for every project that has no dial of its own. A per-project dial always outranks it, so `/zeph-mode normal` opts a single project back into per-turn pushes and `/zeph-mode normal --global` does it everywhere.
 
 State lives in a file under `${XDG_STATE_HOME:-~/.local/state}/zeph`, keyed by project directory (`pushmode-default` for the global one) — it survives reboots and new sessions until you undo it. Mute silences both hooks and CLI calls and overrides any push mode; mute stays per-project by design, since a global mute could never be lifted for a single project.
 
@@ -194,13 +192,13 @@ zeph-to/plugin (Claude Code plugin)
   ├─ .mcp.json             → registers the MCP server (`zeph mcp`)
   └─ builds on:
       ├─ @zeph-to/cli         → hooks + notify/list/dismiss + tmux remote control
-      └─ @zeph-to/mcp-server  → zeph_ask / zeph_prompt / zeph_input / clipboard / file …
+      └─ @zeph-to/mcp-server  → zeph_ask / notify / clipboard / file …
 ```
 
 | Layer | Package | Role | Reliability |
 |-------|---------|------|-------------|
 | **Hooks** | `@zeph-to/cli` | auto-fire on Claude events | 100% — no AI cooperation needed |
-| **MCP server** | `@zeph-to/mcp-server` | AI-callable tools (ask, prompt, input…) | depends on the model following rules |
+| **MCP server** | `@zeph-to/mcp-server` | AI-callable tools (ask, notify, file…) | depends on the model following rules |
 | **Plugin** | `zeph-to/plugin` | bundles hooks + MCP + rules | installed once |
 
 <details>
@@ -250,8 +248,6 @@ Claude Code's `AskUserQuestion` is a **local blocking picker**: it renders in th
 | Task completed | Stop hook | 100% | No (skipped if AI already sent `zeph_ask`) |
 | Question asked | Ask hook | 100% | No |
 | Decision / input needed | `zeph_ask` | ~80% (AI must call it) | No |
-| Decision only | `zeph_prompt` | ~80% | No |
-| Text input only | `zeph_input` | ~80% | No |
 | Manual push | `zeph_notify` | on request | No |
 </details>
 
@@ -273,7 +269,7 @@ zeph <command>       # or: npx @zeph-to/cli <command>
 | `cc` · `codex` · `gemini` | run the agent in a phone-reachable tmux session |
 | `test` | verify connection |
 
-**Session commands (Claude Code):** `/zeph-config` (guided setup) · `/zeph-auto [duration] [task]` · `/zeph-mute` · `/zeph-unmute` · `/zeph-status` · `/zeph-quiet` · `/zeph-loud` · `/zeph-normal`.
+**Session commands (Claude Code):** `/zeph-config` (guided setup) · `/zeph-auto [duration] [task]` · `/zeph-mode [quiet|normal|loud|mute|unmute] [--global]`.
 
 Full CLI, SDK, and listener docs: [`@zeph-to/cli`](https://github.com/zeph-to/cli).
 
@@ -289,7 +285,7 @@ With it on, push bodies and attachments are encrypted with AES-256-GCM. Each mac
 
 - **It does not stop an active operator.** Recipient public keys come from the same server, unsigned. A backend that injects a device record carrying its own key gets the message key wrapped for it. The Zeph app ships the counter-measure — compare device fingerprints, mark them verified, and strict mode then wraps only for verified devices — but it is off by default and the CLI and MCP server do not consult it (ADR-0007 Phase 4).
 - **There is no forward secrecy.** The shared secret for a given sender/device pair is static, so compromising either private key opens every past push wrapped for that pair.
-- **The ask loop is not encrypted.** `zeph_ask`, `zeph_prompt` and `zeph_input` travel over the hook route, which carries no sender key: the question's title and body are plaintext, and so is your answer. The server refuses an encrypted file on an answer outright rather than handing the agent bytes it cannot open. (A file the *agent* attaches to a question is the one exception — it carries its own wrapped key.)
+- **The ask loop is not encrypted.** `zeph_ask` travels over the hook route, which carries no sender key: the question's title and body are plaintext, and so is your answer. The server refuses an encrypted file on an answer outright rather than handing the agent bytes it cannot open. (A file the *agent* attaches to a question is the one exception — it carries its own wrapped key.)
 
 Your agent's machine is also **send-only** under encryption: it registers no public key and the listener does not decrypt, so nothing is encrypted *to* it.
 

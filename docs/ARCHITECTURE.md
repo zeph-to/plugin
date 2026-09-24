@@ -11,13 +11,13 @@
 ├─────────────────────────────────────────────────────────────┤
 │ Layer 2: MCP Server (@zeph-to/mcp-server)                   │
 │ → AI가 tool 호출. 요청 시 동작.                               │
-│ → zeph_ask, zeph_notify, zeph_prompt, zeph_input 등         │
+│ → zeph_ask, zeph_notify, zeph_file 등                      │
 │ → Claude Code, Gemini CLI, Cursor, Windsurf 지원            │
 ├─────────────────────────────────────────────────────────────┤
 │ Layer 1: CLI (@zeph-to/cli)                            │
 │ → shell command. 어디서든 실행 가능.                          │
 │ → zeph notify --title "..." --body "..."                    │
-│ → notify만 가능. prompt/input 불가.                          │
+│ → notify만 가능. ask 불가.                                   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -99,9 +99,7 @@ Claude가 유저에게 질문 (AskUserQuestion tool 호출)
 | Tool | 용도 | 동작 | 필요 env |
 |------|------|------|----------|
 | zeph_notify | 알림 전송 | fire & forget | ZEPH_API_KEY |
-| zeph_ask | 선택지+텍스트 결합 | blocking (응답 대기) | + ZEPH_HOOK_ID |
-| zeph_prompt | 선택지 질문 | blocking (응답 대기) | + ZEPH_HOOK_ID |
-| zeph_input | 텍스트 입력 | blocking (응답 대기) | + ZEPH_HOOK_ID |
+| zeph_ask | 선택지+텍스트 (actions 없으면 텍스트만) | blocking (응답 대기) | + ZEPH_HOOK_ID |
 | zeph_clipboard | 클립보드 복사 | fire & forget | ZEPH_API_KEY |
 | zeph_file | 파일 전송 | fire & forget | ZEPH_API_KEY |
 | zeph_list | 알림 목록 | read only | ZEPH_API_KEY |
@@ -133,23 +131,23 @@ zeph notify --title "dev test"
 ## Mute / Push Mode 메커니즘
 
 ```
-/zeph-mute 실행
-  → Claude가 bash 실행: touch ${XDG_STATE_HOME:-~/.local/state}/zeph/muted-{cksum hash}
+/zeph-mode mute 실행
+  → scripts/zeph-mode.sh: touch ${XDG_STATE_HOME:-~/.local/state}/zeph/muted-{cksum hash}
   → Stop hook: mute 파일 체크 → exit 0 (알림 skip)
   → Ask hook: mute 파일 체크 → exit 0 (알림 skip)
   → CLI (cli): mute 파일 체크 → exit 0 (다른 agent도 적용)
 ```
 
 - **Scope:** project-dir 기반 hash. 다른 프로젝트 세션은 영향 없음.
-- **생명주기:** per-user state dir에 저장 → `/zeph-unmute` 전까지 유지 (재부팅에도 유지).
+- **생명주기:** per-user state dir에 저장 → `/zeph-mode unmute` 전까지 유지 (재부팅에도 유지).
   구버전이 `/tmp`에 남긴 파일은 현재 유저 소유일 때만 인정 (world-writable `/tmp`
   선점 공격 차단).
-- **Mute 커맨드:** `/zeph-mute`, `/zeph-unmute`, `/zeph-status`
+- **커맨드:** `/zeph-mode [quiet|normal|loud|mute|unmute] [--global]` — 인자 없으면 상태. 바꾼 뒤 새 상태의 SessionStart 규칙을 다시 출력(그 훅은 세션 중 재실행 안 됨)
 
 **Push Mode** — mute와 같은 state-파일 패턴(`pushmode-{hash}`)으로 Stop
 hook의 자동 푸시 볼륨을 조절. mute가 완전 침묵이라면 push mode는 그 사이 다이얼:
 
-- `/zeph-quiet` → `high` 마커만 통과 · `/zeph-loud` → 매 턴 푸시 · `/zeph-normal` → 기본
+- `/zeph-mode quiet` → `high` 마커만 통과 · `/zeph-mode loud` → 매 턴 푸시 · `/zeph-mode normal` → 기본
 - **Scope:** 기본은 프로젝트 단위. `--global`을 붙이면 해시 없는 `pushmode-default`에
   기록되어, 자기 다이얼이 없는 모든 프로젝트의 기본값이 됨. 해석 순서는
   프로젝트 파일 > (구버전) `/tmp` 파일 > `pushmode-default` > `normal` —

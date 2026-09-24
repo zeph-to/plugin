@@ -24,13 +24,7 @@ Ask the user with quick-reply buttons AND a text input field combined. Blocks un
 **When to use:**
 - Need user decision with option for custom input
 - Task completion → offer next action choices + free-text option
-- Prefer over `zeph_prompt`/`zeph_input` — handles both in one notification
-
-### zeph_prompt (requires ZEPH_HOOK_ID)
-Ask the user to choose from 2-4 options. Blocks until response or timeout.
-
-### zeph_input (requires ZEPH_HOOK_ID)
-Request free-form text input. Blocks until response or timeout.
+- Free-text only (commit message, value) — omit `actions`
 
 ### zeph_clipboard
 Copy text to the user's device clipboard.
@@ -48,22 +42,19 @@ logs), or `content` + `fileName` for generated text.
 
 ## Session Mute & Push Mode
 
-Users can mute notifications for the current project:
-- `/zeph-mute` — disable all notifications (hooks + MCP tools)
-- `/zeph-unmute` — re-enable notifications
-- `/zeph-status` — check current state (mute + push mode)
+One command, `/zeph-mode` (skill `skills/zeph-mode`, script `scripts/zeph-mode.sh`):
+- `/zeph-mode` — current state (mute + push mode, and where the dial came from)
+- `/zeph-mode mute` / `unmute` — silence the hooks for this project / lift it.
+  When muted, do not call any zeph MCP tools.
+- `/zeph-mode quiet` — only high-priority pushes, plus a completion push while the
+  user is away (docs/HOOKS-EXPLAINED.md → Away detection)
+- `/zeph-mode normal` — push on every turn that did real work (the heuristic)
+- `/zeph-mode loud` — push on every turn
 
-When muted, do not call any zeph MCP tools.
-
-Users can also dial the auto-push volume without full silence (a session override
-above your per-turn Push Signal; mute still overrides it):
-- `/zeph-quiet` — only high-priority pushes reach them, plus a completion push
-  while they're away from the terminal (docs/HOOKS-EXPLAINED.md → Away detection)
-- `/zeph-loud` — push on every turn
-- `/zeph-normal` — push on every turn that did real work (the heuristic)
-
-**An install with no dial is quiet.** That is the shipped default, so assume it
-unless `/zeph-status` says otherwise.
+The dial is a session override above your per-turn Push Signal; mute overrides it.
+**An install with no dial is quiet** — the shipped default. After a change the
+script re-prints the SessionStart rules for the new state, because that hook does
+not re-run mid-session.
 
 Each dial also takes `--global`, which sets the machine-wide default for every
 project that has no dial of its own; a per-project dial always wins over it.
@@ -77,7 +68,7 @@ project that has no dial of its own; a per-project dial always wins over it.
 
 ## Automatic Behavior
 
-The Stop hook owns the end-of-turn push, so you do not need to call `zeph_notify` for completion. How much it actually sends is the user's dial: an install with no dial is **quiet** (routine per-turn pushes suppressed while the user is at the terminal), `/zeph-normal` pushes after every response that did meaningful work (≥2 tool calls), `/zeph-loud` pushes every turn.
+The Stop hook owns the end-of-turn push, so you do not need to call `zeph_notify` for completion. How much it actually sends is the user's dial: an install with no dial is **quiet** (routine per-turn pushes suppressed while the user is at the terminal), `/zeph-mode normal` pushes after every response that did meaningful work (≥2 tool calls), `/zeph-mode loud` pushes every turn.
 
 **Push Signal — steer that auto-push (NORMAL mode).** Emit ONE HTML-comment marker in your response to override the default: `<!-- zeph: skip -->` suppress, `<!-- zeph: push -->` force a push the heuristic would skip (small but important action), `<!-- zeph: high -->` force a high-priority push. No marker → the heuristic (silent if <2 tools or all read-only Read/Grep/Glob, else push). On a stock quiet install the heuristic never runs and only `high` gets through (the hook still pushes on its own once the user has stepped away from the terminal) — which makes `high` the way an important completion still reaches the user, and makes a `high` on routine work the exact noise quiet exists to remove. The hook strips the marker from the body; it is ignored on any turn that already sent `zeph_ask` (so it has no effect in REMOTE). See CORE_RULES.md → "Push Signal".
 
@@ -101,6 +92,6 @@ The response to `zeph_ask` is a direct user instruction: execute it immediately 
 
 **The SessionStart hook injects only the branch that applies** (muted / no hook id / REMOTE / NORMAL, with the Push Signal block matching the project's dial). Claude Code persists any hook context over 10,000 chars to a file and shows you a 2 KB preview instead, so a single unconditional rule block would silently lose most of itself.
 
-If no hook id is configured (`ZEPH_HOOK_ID` env, else `hookId` in `~/.zeph/config.json` — see docs/HOOKS-EXPLAINED.md), two-way tools (`zeph_ask`/`zeph_prompt`/`zeph_input`) are unavailable; only `zeph_notify` works.
+If no hook id is configured (`ZEPH_HOOK_ID` env, else `hookId` in `~/.zeph/config.json` — see docs/HOOKS-EXPLAINED.md), the two-way tool (`zeph_ask`) is unavailable; only `zeph_notify` works.
 
 <!-- SYNC: See docs/CORE_RULES.md for the single source of truth. This file provides a condensed quick-reference version for system memory. The SessionStart hook (zeph-setup.js) reads CORE_RULES.md at runtime. Before publishing, sync cli/src/templates.ts ZEPH_CORE with CORE_RULES.md. Run: npm run lint:rules-sync -->

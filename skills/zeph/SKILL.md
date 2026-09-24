@@ -1,17 +1,14 @@
 ---
 name: zeph
 description: >
-  AI agent notification skill via Zeph. Send push notifications, prompt for
-  decisions, request text input across user devices. Use when completing long
-  tasks, encountering errors, or needing user decisions while away from terminal.
+  How to use the zeph_* MCP tools — notify, ask, send files and clipboard text
+  to the user's devices. The Stop hook already pushes on completion.
 metadata:
   author: zeph-to
   version: "0.10.0"
   relatedSkills:
     - zeph-config
-    - zeph-mute
-    - zeph-status
-    - zeph-unmute
+    - zeph-mode
   triggers:
     - zeph
     - notifications
@@ -35,13 +32,8 @@ Use Zeph MCP tools to communicate with the user across devices (mobile, browser,
 
 ## Core Tools
 
-**Which interaction tool?** (all three below require `ZEPH_HOOK_ID`)
-
-| Tool | Buttons | Free-text | Use when |
-|------|:-------:|:---------:|----------|
-| `zeph_ask` | ✓ | ✓ | Decisions that may need a custom answer — **preferred default** |
-| `zeph_prompt` | ✓ | ✗ | Fixed multiple-choice, no custom answer needed |
-| `zeph_input` | ✗ | ✓ | Free-text only (commit message, value, description) |
+**Asking the user:** `zeph_ask` is the one interaction tool (requires `ZEPH_HOOK_ID`) —
+buttons via `actions`, plus a text field; leave `actions` out for free-text-only answers.
 
 ### zeph_notify
 Send a one-way push notification.
@@ -74,21 +66,7 @@ Ask the user with quick-reply buttons AND a text input field combined. Blocks un
 - Any question where buttons alone might not cover all answers
 - Include `fallback` for timeout auto-selection
 
-**Prefer `zeph_ask` over `zeph_prompt`/`zeph_input`** — it handles both cases in a single notification.
-
-### zeph_prompt (requires ZEPH_HOOK_ID)
-Ask the user to choose from 2-4 options. Blocks until response or timeout.
-
-**When to use:**
-- Simple yes/no or multiple choice with no need for custom text
-- Include `fallback` for timeout auto-selection
-
-### zeph_input (requires ZEPH_HOOK_ID)
-Request free-form text input. Blocks until response or timeout.
-
-**When to use:**
-- Need free-form text only (commit message, env var value, description)
-- User is away from terminal
+- Free-text only (commit message, env var value) — omit `actions`
 
 ### zeph_clipboard
 Copy text to the user's device clipboard.
@@ -183,18 +161,12 @@ zeph_ask(title: "Done. Next?", actions: [{id:"/review", label:"Review"}, {id:"/s
 
 ## Skill Map
 
-Zeph has 6 related skills. Here's when to use each:
-
 | Skill | When | Example |
 |-------|------|---------|
-| **/zeph** | You need to send notifications, ask questions, collect input | "Build done, next?", request deployment confirmation |
-| **/zeph-auto** | User starts a time-boxed autonomous work session | `/zeph-auto 2h fix the flaky tests` — loop until the budget runs out, steer via zeph_ask |
-| **/zeph-config** | Setting up Zeph for the first time, or adding Hook ID for remote control | `zeph-config` to guide through credentials & environment setup |
-| **/zeph-mute** | Too many notifications? Silence them for this project (until unmuted) | `/zeph-mute` when working on something that doesn't need interruptions |
-| **/zeph-status** | Check whether notifications are muted or active | `/zeph-status` to see current state |
-| **/zeph-unmute** | Re-enable notifications after muting | `/zeph-unmute` to turn them back on |
-
-**Pro tip**: Users typically run `/zeph-config` once, then `/zeph` is automatic. Use `/zeph-mute`, `/zeph-status`, `/zeph-unmute` only when needed (optional shortcuts).
+| **/zeph** | Sending notifications, asking questions, sharing files | "Build done, next?" |
+| **/zeph-mode** | Show or change the push dial, mute or unmute | `/zeph-mode` (status) · `/zeph-mode normal` · `/zeph-mode mute` |
+| **/zeph-auto** | User starts a time-boxed autonomous session | `/zeph-auto 2h fix the flaky tests` |
+| **/zeph-config** | First-time setup, or adding the Hook ID for remote control | `/zeph-config` |
 
 ## Multi-Agent Workflows
 

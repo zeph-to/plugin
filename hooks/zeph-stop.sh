@@ -5,11 +5,11 @@
 # calls AND not all read-only (Read/Grep/Glob). Stays silent when:
 #   - the project is muted
 #   - jq is not installed
-#   - the response already sent a zeph_ask / zeph_prompt (avoid duplicates)
+#   - the response already sent a zeph_ask (avoid duplicates)
 #   - a `skip` marker, or the no-marker heuristic above, says so
-#   - the user set /zeph-quiet (and this turn has no `high` marker, and the
+#   - the dial is quiet (and this turn has no `high` marker, and the
 #     user is at the terminal — see zeph_is_away)
-# The user can also force a push every turn with /zeph-loud.
+# The user can also force a push every turn with /zeph-mode loud.
 
 command -v jq >/dev/null 2>&1 || exit 0
 
@@ -27,7 +27,7 @@ zeph_state_present muted "$MUTE_HASH" >/dev/null && exit 0
 #   loud  — push every turn, overriding skip / <2-tool / read-only
 #   normal — the marker + heuristic gate decides
 # No dial at all → quiet, the shipped default. Set via the
-# /zeph-quiet|/zeph-loud|/zeph-normal skills, mirroring /zeph-mute. Resolution
+# /zeph-mode skill (scripts/zeph-mode.sh), which also sets mute. Resolution
 # (including what a broken or unreadable dial means) lives in gate.sh alongside
 # its TS twin's — see zeph_read_pushmode.
 PUSHMODE=$(zeph_read_pushmode "$MUTE_HASH")
@@ -111,7 +111,7 @@ def since_last_user:
 # ── Per-turn tool tallies (one jq pass) ──────────────────────────────────────
 # Three counts drive the gate, all derived from the same tool_use list, so a
 # single jq pass emits them as one "ask tools nonreadonly" tuple:
-#   ALREADY_ASKED     — zeph_ask/zeph_prompt this turn (a push already went out)
+#   ALREADY_ASKED     — zeph_ask this turn (a push already went out)
 #   TOOL_COUNT        — total tool_use blocks
 #   NONREADONLY_COUNT — tools that are NOT read-only (Read/Grep/Glob); a turn
 #                       with zero is exploration noise the B1 floor drops.
@@ -121,13 +121,13 @@ TAIL_CONTENT=$(read_tail)
 read ALREADY_ASKED TOOL_COUNT NONREADONLY_COUNT < <(printf '%s\n' "$TAIL_CONTENT" | jq -rs "$JQ_SINCE_USER"'
     since_last_user
     | [.[] | content_blocks[] | select(.type == "tool_use") | .name // ""] as $tools
-    | "\($tools | map(select(. == "zeph_ask" or . == "zeph_prompt")) | length) \($tools | length) \($tools | map(select(. != "Read" and . != "Grep" and . != "Glob")) | length)"
+    | "\($tools | map(select(. == "zeph_ask")) | length) \($tools | length) \($tools | map(select(. != "Read" and . != "Grep" and . != "Glob")) | length)"
 ' 2>/dev/null)
 ALREADY_ASKED=${ALREADY_ASKED:-0}
 TOOL_COUNT=${TOOL_COUNT:-0}
 NONREADONLY_COUNT=${NONREADONLY_COUNT:-0}
 
-# Dedup: if the assistant already sent a zeph_ask / zeph_prompt this turn, that
+# Dedup: if the assistant already sent a zeph_ask this turn, that
 # already delivered a notification — never double-fire (checked before the marker
 # gate so a Push Signal can never stack a second push on top of an ask-push).
 [ "$ALREADY_ASKED" -gt 0 ] && exit 0
