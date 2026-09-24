@@ -154,6 +154,17 @@ run_hook "$FIXTURES/main-with-zeph-ask.jsonl"
 assert "stays silent (ALREADY_ASKED > 0)" zeph_silent
 
 echo
+echo "[regression: zeph_ask under its real MCP tool name — dedup]"
+# Claude Code logs an MCP call under its namespaced name: the plugin's server
+# as mcp__plugin_zeph_zeph__zeph_ask, a hand-registered one as
+# mcp__zeph__zeph_ask. The bare-name fixture above never matches a real
+# transcript, so dedup silently never fired and every ask turn could push twice.
+run_hook "$FIXTURES/main-with-zeph-ask-mcp.jsonl"
+assert "plugin MCP name stays silent" zeph_silent
+run_hook "$FIXTURES/main-with-zeph-ask-mcp-manual.jsonl"
+assert "manual MCP name stays silent" zeph_silent
+
+echo
 echo "[regression: string-content turn detection]"
 # Real Claude Code logs typed user messages with .message.content as a
 # STRING (not an array of blocks). is_real_user must still recognise them
