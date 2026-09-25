@@ -227,6 +227,41 @@ the format, the check stops matching and the old behaviour returns (REMOTE
 ends), never a REMOTE that cannot be left. The TS twin is unchanged: the
 agents it serves (Gemini, Codex, Pi) do not produce these turns.
 
+## Amendment (2026-09-25) — a message from another agent counts as a phone message
+
+`zeph_agent_send` (MCP) and `zeph send` (CLI) let one agent type into another
+agent's session. They post the same `agent.command` push the phone sends,
+through the API-key endpoint (`senderDeviceId: api_<keyId>`). The listener
+injects it with the same `tryInject`, which writes the same one-shot marker,
+and this hook matches the typed text without looking at who sent the push. So
+a session that receives a message from another agent enters REMOTE, exactly as
+it would for a phone message.
+
+This is intended (zeph ADR-0014). The expected case is the user asking agent A,
+from the phone, to hand work to agent B. With B in REMOTE, B's result reaches
+the phone as a `zeph_ask` the user can answer. If the listener skipped agent
+senders, the quiet push dial (the default) would give the phone at most the
+plain completion push that away detection sends (HOOKS-EXPLAINED § Away
+detection), with nothing to answer. Neither the hook nor the listener changes.
+
+The costs, accepted with that:
+- B's model is told what a phone message tells it: that the message arrived from
+  the user's phone, verified by the listener (the entry note in
+  `hooks/zeph-remote.sh`, and its twin in the cli `remote-hook.ts`). For an
+  agent-sent message that vouches for text another agent wrote, `[from …]` header
+  included, as the user's own. The note is left as it is; zeph ADR-0014 lists
+  this with the other accepted risks.
+- When the user drove A from the terminal, B still asks on the phone. The ask's
+  Done-like timeout fallback then ends REMOTE without further pushes.
+- REMOTE state is kept per project directory (`remote-active-<hash>`), not per
+  session. When A and B are two sessions in one project directory on one
+  machine, B entering REMOTE puts A in REMOTE too — A's `AskUserQuestion` is
+  refused and redirected to `zeph_ask` (`hooks/zeph-ask.sh`) — until A's next
+  typed prompt ends it for both. The reverse holds as well: B leaving REMOTE (a
+  Done-like answer, send-and-exit, or a prompt typed at B) deletes the shared
+  file and drops a phone-driven A to NORMAL. The same-cwd
+  edge above covers marker matching only; this is the shared state.
+
 ## Related
 - ADR-0001 (Push Signal): the marker precedent and the "plugin-only vs coupled
   release" trade-off this ADR consciously takes the other side of.
