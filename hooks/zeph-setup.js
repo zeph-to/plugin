@@ -208,7 +208,7 @@ const REMOTE_STUB = `### What starts REMOTE
 
 The user sending a message from their phone starts sticky REMOTE — the UserPromptSubmit hook says so on that turn and injects the contract in full. A \`zeph_ask\` result reporting \`zephState: "REMOTE"\` starts it mid-turn.
 
-From that response on: end EVERY response with \`zeph_ask\` (2–4 \`actions\` plus a Done-like \`fallback\`, \`timeout\` 300–600s), route button-friendly questions through it instead of \`AskUserQuestion\`, and never end on a plain-text question — until the user exits with a Done-like button, a free-text wrap-up you read as one (emit \`<!-- zeph: exit -->\` once), or a prompt they type at the terminal.`;
+From that response on: end EVERY response with \`zeph_ask\` (2–4 \`actions\` plus a Done-like \`fallback\`, \`timeout\` 300–600s), route button-friendly questions through it instead of \`AskUserQuestion\`, and never end on a plain-text question — until the user exits with a Done-like button, the phone's "send and exit" (a result with a \`value\` and \`zephState: "NORMAL"\` — their final instruction: carry it out, no \`zeph_ask\`), a free-text wrap-up you read as one (emit \`<!-- zeph: exit -->\` once), or a prompt they type at the terminal.`;
 
 const normal = (pushmode) => join([
     '# Zeph — Notification Rules (active every response)',
