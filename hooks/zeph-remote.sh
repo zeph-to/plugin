@@ -17,14 +17,13 @@
 #   2. Leaving. The marker is one-shot, but REMOTE is not — it is recorded in
 #      `remote-active-<hash>` (see gate.sh) so it outlives the entry turn and
 #      survives context compaction, which is what Rule 13 promises. A prompt
-#      that reaches this hook without a marker was typed at the terminal: the
-#      only way text becomes a prompt without one is the user's own keyboard
-#      (phone answers to a zeph_ask come back as a tool_result and never reach
-#      a prompt hook at all). The user is back, so the mode ends here — clear
-#      the state and say so once. Re-entry costs one more phone message.
-#      The exception is a fresh marker left unmatched: a phone message is in
-#      flight, the evidence is ambiguous, and the mode is left exactly as it
-#      was (see remote_origin_match's three-way verdict).
+#      that reaches this hook without a marker was typed at the terminal —
+#      unless Claude Code wrote it itself (see system_turn below: a phone
+#      answer to a zeph_ask can arrive that way). The user is back, so the
+#      mode ends here — clear the state and say so once. Re-entry costs one
+#      more phone message. The exceptions leave the mode exactly as it was: a
+#      fresh marker left unmatched (a phone message is in flight — see
+#      remote_origin_match's three-way verdict) and a system-written turn.
 #
 # No marker and no live state → silent no-op. This hook only ever adds context
 # and must never block a prompt (always exit 0).
@@ -127,6 +126,38 @@ remote_origin_match() {
     return 0
 }
 
+# system_turn — rc 0 when Claude Code wrote this prompt itself. Such turns reach
+# UserPromptSubmit like typed ones, and the hook input carries no origin field
+# (Claude Code 2.1.282 sends the common fields plus `prompt` and
+# `session_title`), so the text is the only tell. None of them is the user at
+# the keyboard, and one of them is the user on the phone: a zeph_ask that
+# outlives Claude Code's MCP auto-background window (120 s by default,
+# CLAUDE_CODE_MCP_AUTO_BACKGROUND_MS), or that is waiting when another message
+# lands, moves to the background, and the phone answer then arrives as a
+# <task-notification> turn instead of a tool_result. Read as KEYBOARD, every
+# slow phone answer ended REMOTE.
+#   <task-notification>                      a background task or MCP call finished
+#   Another Claude session sent a message    a subagent or peer reported (": " between
+#                                            turns, " while you were working:" mid-turn)
+#   A peer session sent a message            the same, mid-turn wording
+#   <cross-session-message                   the raw cross-session wrapper
+#   The <name> plugin sent a message         a prompt a plugin submitted
+# Prefixes read from the Claude Code 2.1.282 binary; the first two also seen in
+# real transcripts (2026-09-25). If Claude Code changes them, this fails toward
+# the old behaviour (REMOTE ends), never toward a REMOTE that cannot be left —
+# the next prompt that really is typed still ends it. Only the exit branch
+# asks, so the jq spawn is paid only while REMOTE is live.
+system_turn() {
+    local prompt
+    prompt=$(printf '%s' "$INPUT" | jq -r '.prompt // empty' 2>/dev/null)
+    case "$prompt" in
+        '<task-notification>'* | '<cross-session-message'* | \
+        'Another Claude session sent a message'* | 'A peer session sent a message'* | \
+        'The '*' plugin sent a message'*) return 0 ;;
+    esac
+    return 1
+}
+
 # Exactly one additionalContext per invocation, and the verdict decides which:
 # PHONE enters, KEYBOARD leaves, UNCLEAR says nothing and leaves the mode as it
 # was — the pending marker will speak for itself on the turn it matches.
@@ -159,10 +190,12 @@ $RULE9"
 
 This user message arrived from the user'"'"'s phone via Zeph agent chat (verified by the listener — exact text match), but no hook id is configured (neither `ZEPH_HOOK_ID` nor `hookId` in ~/.zeph/config.json), so the two-way tool (zeph_ask) is unavailable. Make your final message self-contained — the Stop-hook push is the user'"'"'s only feedback channel. If you have not already mentioned it this session, tell the user once that running `npx @zeph-to/cli setup` upgrades this into a two-way remote session (buttons + text replies from the phone).'
     fi
-elif [ "$ORIGIN" -eq 1 ] && zeph_remote_active "$HASH" && [ -n "$(zeph_hook_id)" ]; then
+elif [ "$ORIGIN" -eq 1 ] && zeph_remote_active "$HASH" && ! system_turn && [ -n "$(zeph_hook_id)" ]; then
     # KEYBOARD on a live REMOTE session: the user typed this at the terminal,
     # so they are back and REMOTE ends. Emitted once — the state is gone, so
     # every later terminal turn is a silent no-op and costs nothing per turn.
+    # A turn Claude Code wrote itself says nothing about who holds the device
+    # and falls through to the silent no-op below.
     zeph_remote_clear "$HASH"
     CTX='# System note (Zeph)
 

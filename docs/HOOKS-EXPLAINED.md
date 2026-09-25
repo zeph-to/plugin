@@ -305,11 +305,20 @@ ls "${XDG_STATE_HOME:-$HOME/.local/state}/zeph/muted-$HASH"
 *Leaving:*
 - The marker is one-shot, but REMOTE is not — it lives in the state file below,
   which is also what makes it survive context compaction (Rule 13)
-- A prompt that reaches this hook without a marker was typed at the terminal:
-  the only way text becomes a prompt without one is the user's own keyboard,
-  since a phone answer to a `zeph_ask` comes back as a `tool_result` and never
-  reaches a prompt hook. So the hook clears the state and says once that the
-  session has left REMOTE; later terminal turns then cost nothing
+- A prompt that reaches this hook without a marker was typed at the terminal,
+  so the hook clears the state and says once that the session has left REMOTE;
+  later terminal turns then cost nothing
+- Exception: turns Claude Code writes itself — `<task-notification>` (a
+  background task or MCP call finished), a subagent or peer report (`Another
+  Claude session sent a message…`, `A peer session sent a message…`,
+  `<cross-session-message`), or a plugin-submitted prompt (`The <name> plugin
+  sent a message…`). They reach UserPromptSubmit with no marker, and the hook
+  input carries no origin field, so `system_turn` matches the prompt prefix and
+  leaves the mode alone. It matters because a `zeph_ask`
+  can arrive this way: past Claude Code's MCP auto-background window (120 s by
+  default, `CLAUDE_CODE_MCP_AUTO_BACKGROUND_MS`), or when another message lands
+  while it waits, the call moves to the background and the phone answer comes
+  back as a task notification instead of a `tool_result`
 - Exception: a *fresh* marker the prompt failed to match means a phone message
   is still in flight (queued behind a long turn, or a digest the two sides
   compute differently). The evidence is ambiguous, so the hook says nothing and
