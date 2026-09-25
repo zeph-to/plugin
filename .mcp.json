@@ -6,7 +6,7 @@
         "mcp"
       ],
       "env": {
-        "ZEPH_API_KEY": "${ZEPH_API_KEY}"
+        "ZEPH_API_KEY": "${ZEPH_API_KEY:-}"
       }
     }
   }
