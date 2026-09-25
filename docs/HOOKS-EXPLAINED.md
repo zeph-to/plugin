@@ -13,7 +13,7 @@ The plugin installs 4 hooks that fire automatically on Claude Code events:
 | **SessionStart** | Session begins | zeph-setup.js | Inject behavioral rules into context |
 | **Stop** | Response ends | zeph-stop.sh | Send completion notification if work was done |
 | **PreToolUse** (Ask) | Before AskUserQuestion | zeph-ask.sh | Send notification when Claude asks user a question |
-| **UserPromptSubmit** | Prompt submitted | zeph-remote.sh | Flag phone-sent messages, and hold sticky REMOTE mode across later turns (ADR-0002) |
+| **UserPromptSubmit** | Prompt submitted | zeph-remote.sh | Flag phone-sent (and agent-sent) messages, and hold sticky REMOTE mode across later turns (ADR-0002) |
 
 ---
 
@@ -287,7 +287,9 @@ ls "${XDG_STATE_HOME:-$HOME/.local/state}/zeph/muted-$HASH"
 *Entry:*
 - Fires on every prompt submit, and enters REMOTE only when the prompt matches
   a marker the `zeph listener` wrote as it injected a phone message into this
-  project's tmux pane
+  project's tmux pane — or a message another agent sent with `zeph_agent_send` /
+  `zeph send`, which the listener injects the same way (ADR-0002 amendment
+  2026-09-25)
 - Match = same project (cksum of dir) + fresh (≤15 min) + byte-identical
   sha256 of the trimmed text — a terminal keystroke can never false-match
 - On match: consumes the marker (one-shot), records the mode in the state file
