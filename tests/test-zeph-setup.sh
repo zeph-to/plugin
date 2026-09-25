@@ -98,6 +98,10 @@ assert "carries two-way rule content"          ctx_has "zeph_ask"
 assert "says the user is at the terminal"      ctx_has "the user is at the terminal"
 assert "states no ask is owed"                 ctx_has "You owe no"
 assert "names what starts REMOTE"              ctx_has "What starts REMOTE"
+# A session that enters REMOTE mid-turn has only this stub, so the phone's
+# send-and-exit must be among its exits or the model keeps asking.
+assert "names the phone's send-and-exit"       ctx_has '"send and exit"'
+assert "ends send-and-exit with no ask"        ctx_has 'carry it out, no `zeph_ask`'
 assert "keeps Rule 13 (compaction)"            ctx_has "after context compaction"
 # Rules 3/4/5/6/10/11 are REMOTE-scoped. Injecting them here is the regression
 # that made a terminal session block on a phone answer nobody was there to give.

@@ -179,10 +179,10 @@ MARKER=""
 [[ "$TEXT" =~ $MARKER_RE ]] && MARKER="${BASH_REMATCH[1]}"
 
 # Exit marker — the model's half of the sticky-REMOTE state machine. The server
-# owns the exits it can see (a Done-like button, a Done-like timeout fallback);
-# the one it cannot is free text that means "we're finished", which is a
-# meaning call. So the model emits `<!-- zeph: exit -->` on that response and
-# this clears the state file.
+# owns the exits it can see (a Done-like button, a Done-like timeout fallback,
+# the phone's send-and-exit); the one it cannot is free text that means
+# "we're finished", which is a meaning call. So the model emits
+# `<!-- zeph: exit -->` on that response and this clears the state file.
 #
 # A SEPARATE pattern from MARKER_RE on purpose: that one is the push-gate
 # vocabulary, parity-locked to cli/src/gate.ts's GateMarker union and to

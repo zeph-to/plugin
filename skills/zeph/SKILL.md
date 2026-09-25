@@ -116,6 +116,8 @@ After file changes, commits, builds, tests, deploys, destructive ops, or milesto
 
 When unsure: lean toward asking. Quiet failure (user stuck on phone with no way to drive) is worse than light spam.
 
+This is the REMOTE default. In NORMAL no `zeph_ask` is owed, however substantial the work — including the instruction a send-and-exit answer carries (see Sticky REMOTE mode below).
+
 ### Handling the response
 
 The response is a direct user instruction — execute it immediately without re-confirming via AskUserQuestion. The button label is the authorization for the specific action that label describes; it is NOT blanket authorization for unrelated destructive operations. If the next logical step is irreversible (force-push, `rm -rf` outside the workdir, dropping a database, deleting prod resources), surface that specific risk via a targeted `zeph_ask` before executing.
@@ -124,15 +126,15 @@ The response is a direct user instruction — execute it immediately without re-
 
 The Ask Loop has two states, and you are told which one you are in — the mode is kept in a file, so it outlives compaction:
 
-- **`zeph_ask` results carry `zephState`** (`"REMOTE"` / `"NORMAL"`). The server applies the transition: any answer but a Done-like action id enters REMOTE, a Done-like id exits, and so does a timeout that fell back to one. No `zephState` means a timeout onto a safe fallback, which changed nothing.
+- **`zeph_ask` results carry `zephState`** (`"REMOTE"` / `"NORMAL"`). The server applies the transition: a Done-like action id exits, and so does a timeout that fell back to one or text the user sent with the phone's "send and exit" button; any other answer enters REMOTE. A send-and-exit result carries a `value` with `NORMAL` — the user's final instruction: carry it out, and end without `zeph_ask`. No `zephState` means a timeout onto a safe fallback, which changed nothing.
 - **Prompt-submit hooks say it where installed** — the remote-origin note on the turn a phone message lands, then a note that the session has LEFT REMOTE on the first prompt the user types at the terminal (a prompt with no phone marker came from their keyboard, unless Claude Code wrote it — a task notification, which is how a long `zeph_ask`'s answer arrives once Claude Code backgrounds the call, or a peer or plugin message; the hook leaves the mode alone for those).
 - **Neither → NORMAL.**
 
-**REMOTE (sticky, `zeph_ask` MANDATORY)**: end EVERY response with `zeph_ask`, independent of whether the work was substantial or routine. It ends when the user exits (button or free text), when they type a prompt at the terminal, or when the state expires after a crash.
+**REMOTE (sticky, `zeph_ask` MANDATORY)**: end EVERY response with `zeph_ask`, independent of whether the work was substantial or routine. It ends when the user exits (a button, "send and exit", or free text), when they type a prompt at the terminal, or when the state expires after a crash.
 
 **NORMAL**: no `zeph_ask` is owed (CORE_RULES.md Rules 3/4 are REMOTE-scoped). The user is at the terminal — ask with `AskUserQuestion` or in prose, and let the Stop hook's push signal completion. An ask here blocks the turn until someone answers on a device or it times out.
 
-**Exit**: buttons and Done-like timeout fallbacks are the server's to detect — it reports them as `zephState: "NORMAL"`. Free text is yours: when the user's typed answer clearly closes the loop ("thanks, that's it", or `done`/`stop`/`exit` as a standalone word — "redo" is not "done"), flip to NORMAL, don't send `zeph_ask` on that response, and emit `<!-- zeph: exit -->` once so the hooks agree. In REMOTE, set `timeout` 300–600 s and a Done-like `fallback` id — an unanswered ask then exits the loop quietly instead of spamming an absent user (re-entry is one phone message away). Never set a fallback id that would authorize a destructive action.
+**Exit**: buttons, "send and exit", and Done-like timeout fallbacks are the server's to detect — it reports them as `zephState: "NORMAL"`. Free text is yours: when the user's typed answer clearly closes the loop ("thanks, that's it", or `done`/`stop`/`exit` as a standalone word — "redo" is not "done"), flip to NORMAL, don't send `zeph_ask` on that response, and emit `<!-- zeph: exit -->` once so the hooks agree. In REMOTE, set `timeout` 300–600 s and a Done-like `fallback` id — an unanswered ask then exits the loop quietly instead of spamming an absent user (re-entry is one phone message away). Never set a fallback id that would authorize a destructive action.
 
 ## AskUserQuestion vs zeph_ask
 

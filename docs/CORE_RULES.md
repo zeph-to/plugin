@@ -86,7 +86,7 @@ A stock install has no dial, which means quiet; `/zeph-mode normal` and `/zeph-m
 
 #### State Detection
 
-- **`zeph_ask` results carry it** as `zephState: "REMOTE" | "NORMAL"`: a non-Done answer enters REMOTE; a Done-like id, or a timeout that fell back to one, exits. No `zephState` = a timed-out ask that changed nothing.
+- **`zeph_ask` results carry it** as `zephState: "REMOTE" | "NORMAL"`: a Done-like id, a timeout that fell back to one, or text sent with the phone's "send and exit" button exits; any other answer enters REMOTE. A send-and-exit result carries a `value` alongside `NORMAL`: it is the user's final instruction — carry it out, and end without `zeph_ask`. No `zephState` = a timed-out ask that changed nothing.
 - **Prompt-submit hooks say it**, where installed: a remote-origin note on the turn a phone message arrives, and a LEFT-REMOTE note on the first prompt typed at the terminal. A phone answer to a `zeph_ask` returns as a `tool_result`, never through a prompt hook — so a prompt with no phone marker is the user's own keyboard, and staying in REMOTE would answer the terminal with a phone loop.
 - **Neither present → NORMAL.**
 - **Free text is the one call left to you** — no hook can tell "run the tests" from "thanks, that's it". A clear wrap-up, or `done`/`stop`/`exit` as a standalone word ("redo" is not "done"), flips you to NORMAL from that response on: no `zeph_ask` on it, and emit `<!-- zeph: exit -->` once so the hooks agree. That marker is separate from any push-volume marker; it says nothing about push volume, and push markers say nothing about the mode.
@@ -95,7 +95,7 @@ A stock install has no dial, which means quiet; `/zeph-mode normal` and `/zeph-m
 
 End EVERY response with `zeph_ask` — 2–4 `actions` (the next-step candidates) plus a Done-like `fallback` (never a destructive one: an unanswered ask resolves to it), `timeout` 300–600 s so silence exits quietly instead of chaining pushes at a user who stepped away. A text-only ask is only for inherently free-form answers. Non-negotiable in REMOTE, substantial work or not.
 
-Four things leave REMOTE: a Done-like button (or a timeout onto one), your own read of a free-text wrap-up, a prompt typed at the terminal, and the state expiring after a crash nobody exited.
+Five things leave REMOTE: a Done-like button (or a timeout onto one), the phone's "send and exit" (text plus exit in one answer), your own read of a free-text wrap-up, a prompt typed at the terminal, and the state expiring after a crash nobody exited.
 
 #### Behavior in NORMAL (no zeph_ask is owed)
 
@@ -160,9 +160,9 @@ REMOTE begins the moment the user sends a message from their phone; from that tu
 | **3: Questions** | NORMAL | `AskUserQuestion` or prose — no `zeph_ask` owed |
 | **4: After work** | REMOTE | End EVERY response with `zeph_ask` (Rule 9) |
 | **4: After work** | NORMAL | End with nothing; the Stop hook's push is the signal |
-| **9: REMOTE** | Entered by a phone message or a non-Done `zeph_ask` answer | End EVERY response with `zeph_ask` |
+| **9: REMOTE** | Entered by a phone message or a `zeph_ask` answer reporting `zephState: "REMOTE"` | End EVERY response with `zeph_ask` |
 | **9: NORMAL** | Initial state, or after any exit | No `zeph_ask` owed |
-| **9: Exit** | Done-like button, free-text wrap-up, or a prompt typed at the terminal | Flip to NORMAL, no ask on the exit response |
+| **9: Exit** | Done-like button, the phone's "send and exit", free-text wrap-up, or a prompt typed at the terminal | Flip to NORMAL, no ask on the exit response |
 | **10: AskUserQuestion** | REMOTE, button-friendly question | `zeph_ask` — the hook denies the picker |
 | **10: AskUserQuestion** | NORMAL, or the answer needs code/logs / multi-paragraph | `AskUserQuestion` opens as usual |
 
