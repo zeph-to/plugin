@@ -1,6 +1,6 @@
 {
   "name": "zeph-plugin",
-  "version": "0.19.1",
+  "version": "0.19.2",
   "private": true,
   "description": "Zeph Claude Code plugin — hooks, skills, and behavioral rules",
   "scripts": {

@@ -141,6 +141,10 @@ remote_origin_match() {
 #                                            turns, " while you were working:" mid-turn)
 #   A peer session sent a message            the same, mid-turn wording
 #   <cross-session-message                   the raw cross-session wrapper
+#   <agent-message                           the bare report wrapper, without the line
+#                                            above: a queued hand-back whose queue entry
+#                                            starts here ended a live REMOTE (2.1.281,
+#                                            2026-09-25; hook input inferred, not captured)
 #   The <name> plugin sent a message         a prompt a plugin submitted
 # Prefixes read from the Claude Code 2.1.282 binary; the first two also seen in
 # real transcripts (2026-09-25). If Claude Code changes them, this fails toward
@@ -151,7 +155,7 @@ system_turn() {
     local prompt
     prompt=$(printf '%s' "$INPUT" | jq -r '.prompt // empty' 2>/dev/null)
     case "$prompt" in
-        '<task-notification>'* | '<cross-session-message'* | \
+        '<task-notification>'* | '<cross-session-message'* | '<agent-message'* | \
         'Another Claude session sent a message'* | 'A peer session sent a message'* | \
         'The '*' plugin sent a message'*) return 0 ;;
     esac
@@ -170,21 +174,55 @@ if [ "$ORIGIN" -eq 0 ]; then
     if [ -n "$(zeph_hook_id)" ]; then
         # Only a two-way session has a mode to stay in — without zeph_ask there
         # is nothing for a later turn to be reminded of, so no state is written.
+        # Asked before the touch: the touch is what makes it true.
+        ALREADY_REMOTE=0
+        zeph_remote_active "$HASH" && ALREADY_REMOTE=1
         zeph_remote_touch "$HASH"
-        # This turn is the transition, so it is where the contract has to
-        # arrive in full. The SessionStart hook only ships a two-line stub of
-        # Rule 9 to a NORMAL session — it cannot know a phone message is
-        # coming — so entry is the one moment the whole section is worth its
-        # bytes. Read from CORE_RULES.md rather than restated here: a copy
-        # would be a fourth place for the rule to drift. If the file is
-        # unreadable the summary below still enters REMOTE correctly.
-        CTX='# System note (Zeph remote-origin detect)
+        if [ "$ALREADY_REMOTE" -eq 1 ]; then
+            # Not a transition: the contract usually arrived on the entry turn,
+            # or with SessionStart after a compact (zeph-setup.js sends it whole
+            # while REMOTE), and is still in context. Repeating it cost 3.4k
+            # chars per phone message. The TS twin (cli remote-hook.ts) also
+            # skips the contract on a repeat, for Gemini and Codex. The state
+            # is per project, not per session, so three sessions reach here
+            # without the contract: one that entered REMOTE mid-turn from a
+            # zeph_ask answer (it has the SessionStart stub), one that started
+            # MUTED and was unmuted, and a second session in the same project
+            # dir. The note therefore carries the operative rule itself instead
+            # of pointing at the contract.
+            CTX='# System note (Zeph remote-origin detect)
+
+This user message arrived from the user'"'"'s phone via Zeph agent chat (verified by the listener). REMOTE continues (Rule 9): end this response with `zeph_ask` — 2–4 `actions` plus a Done-like `fallback`, `timeout` 300–600 s. It ends on a Done-like answer, the phone'"'"'s send and exit, a prompt typed at the terminal, or your free-text wrap-up (emit `<!-- zeph: exit -->` once).'
+        else
+            # This turn is the transition, so it is where the contract has to
+            # arrive. The SessionStart hook only ships a two-line stub of Rule 9
+            # to a NORMAL session — it cannot know a phone message is coming —
+            # so entry is the one moment the section is worth its bytes. Read
+            # from CORE_RULES.md rather than restated here: a copy would be a
+            # fourth place for the rule to drift. If the file is unreadable
+            # the summary below still enters REMOTE correctly.
+            CTX='# System note (Zeph remote-origin detect)
 
 This user message arrived from the user'"'"'s phone via Zeph agent chat (verified by the listener — exact text match). The user is driving this session remotely and is NOT at the terminal. Enter sticky REMOTE mode now (CORE_RULES Rule 9): end EVERY response with `zeph_ask` — with `actions`: 2–4 buttons carrying the next-step candidates plus a Done-like fallback, alongside free-text (a text-only ask leaves the phone with nothing to tap) — until the user exits — an exit signal (done/stop/exit), or a prompt they type at the terminal, which this hook will tell you about. Plain-text questions are invisible to them.'
-        RULE9=$(zeph_core_section '### Sticky REMOTE mode (Rule 9)') \
-            && CTX="$CTX
+            # Minus "#### Behavior in NORMAL": this session was NORMAL until
+            # this prompt, so SessionStart already put NORMAL behaviour in
+            # context — except a session that started MUTED and was unmuted,
+            # which has none (accepted: rare, and the REMOTE rules it needs
+            # now still arrive). SessionStart while REMOTE keeps the subsection —
+            # there it is the only NORMAL text a session has for after an exit.
+            # If the heading is renamed the strip matches nothing and the full
+            # section goes out (the safe direction); the entry test's body
+            # phrase then fails. Both cuts use the same slicer, so their
+            # heading boundaries cannot disagree.
+            if RULE9=$(zeph_core_section '### Sticky REMOTE mode (Rule 9)'); then
+                NORMAL_PART=$(zeph_core_section '#### Behavior in NORMAL (no zeph_ask is owed)')
+                RULE9=${RULE9/"$NORMAL_PART"/}
+                RULE9=${RULE9%$'\n\n'}
+                CTX="$CTX
 
 $RULE9"
+            fi
+        fi
     else
         CTX='# System note (Zeph remote-origin detect)
 

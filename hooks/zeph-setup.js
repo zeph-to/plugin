@@ -21,8 +21,9 @@
 //   REMOTE       → sticky REMOTE in full, no Push Signal (REMOTE ignores markers)
 //   NORMAL       → the default branch, with a two-line pointer to REMOTE
 //
-// A session that transitions into REMOTE on a phone message gets the full
-// contract from the UserPromptSubmit hook (hooks/zeph-remote.sh) on that turn.
+// A session that transitions into REMOTE on a phone message gets the contract
+// (Rule 9 minus its NORMAL subsection) from the UserPromptSubmit hook
+// (hooks/zeph-remote.sh) on that turn.
 // Any state read that fails resolves to the NORMAL branch.
 
 const fs = require('fs');
@@ -201,14 +202,25 @@ const oneWay = (pushmode) => {
 // The NORMAL branch owes no `zeph_ask` at all, so it does not carry Rules
 // 3/4/5/6/10/11 — every one of them is REMOTE-scoped. What it needs is the
 // trigger: what flips the session, and what that turns on. The turn a phone
-// message arrives, the UserPromptSubmit hook injects Rule 9 in full from
-// CORE_RULES.md; a `zeph_ask` answer that reports `zephState: "REMOTE"` flips
-// it mid-turn, which is why the obligation is stated here rather than pointed at.
+// message arrives, the UserPromptSubmit hook injects Rule 9 (minus its NORMAL
+// subsection, which this branch already covers) from CORE_RULES.md; a
+// `zeph_ask` answer that reports `zephState: "REMOTE"` flips it mid-turn,
+// which is why the obligation is stated here rather than pointed at.
 const REMOTE_STUB = `### What starts REMOTE
 
-The user sending a message from their phone starts sticky REMOTE — the UserPromptSubmit hook says so on that turn and injects the contract in full. A \`zeph_ask\` result reporting \`zephState: "REMOTE"\` starts it mid-turn.
+The user sending a message from their phone starts sticky REMOTE — the UserPromptSubmit hook says so on that turn and injects the REMOTE contract. A \`zeph_ask\` result reporting \`zephState: "REMOTE"\` starts it mid-turn.
 
 From that response on: end EVERY response with \`zeph_ask\` (2–4 \`actions\` plus a Done-like \`fallback\`, \`timeout\` 300–600s), route button-friendly questions through it instead of \`AskUserQuestion\`, and never end on a plain-text question — until the user exits with a Done-like button, the phone's "send and exit" (a result with a \`value\` and \`zephState: "NORMAL"\` — their final instruction: carry it out, no \`zeph_ask\`), a free-text wrap-up you read as one (emit \`<!-- zeph: exit -->\` once), or a prompt they type at the terminal.`;
+
+// Rules 7-8 (CORE_RULES "Handling the response"), condensed to under half the
+// full section (0.7k chars). The full text rides only in the SessionStart-while-
+// REMOTE branch below; a session entered from the phone gets Rule 9 at entry and
+// acts on this paragraph for its whole REMOTE stretch, so it keeps the substance
+// of both rules. Restated rather than extracted, like REMOTE_STUB; the setup
+// test pins a shared anchor against CORE_RULES so an edit there shows up here.
+const HANDLING_STUB = `### Handling the response
+
+A \`zeph_ask\` answer is the user's instruction — act on it, and don't re-confirm with \`AskUserQuestion\`. A generic button ("Continue") never authorizes destruction (force-push, \`rm -rf\` outside the workdir, dropping data, deleting prod resources): confirm that with a targeted \`zeph_ask\`, fallback \`cancel\`.`;
 
 const normal = (pushmode) => join([
     '# Zeph — Notification Rules (active every response)',
@@ -216,7 +228,7 @@ const normal = (pushmode) => join([
     'Zeph can hand this session to the user\'s phone, but nobody has done that yet. **You owe no `zeph_ask`**: ask questions with `AskUserQuestion` or in prose, and let the Stop hook\'s push be the completion signal. A `zeph_ask` here blocks the turn until someone answers on a device or it times out.',
     section('### Notification discipline'),
     pushSignal(pushmode),
-    section('### Handling the response'),
+    HANDLING_STUB,
     REMOTE_STUB,
     section('### Persistence'),
 ]);
