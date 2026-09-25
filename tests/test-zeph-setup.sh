@@ -103,6 +103,18 @@ assert "names what starts REMOTE"              ctx_has "What starts REMOTE"
 assert "names the phone's send-and-exit"       ctx_has '"send and exit"'
 assert "ends send-and-exit with no ask"        ctx_has 'carry it out, no `zeph_ask`'
 assert "keeps Rule 13 (compaction)"            ctx_has "after context compaction"
+# Rules 7-8 matter once a zeph_ask is answered, which NORMAL rarely does, so
+# they ride as one condensed paragraph — both rules, not the full section.
+assert "an answer is the user's instruction"   ctx_has "is the user's instruction"
+assert "no re-confirming with the picker"      ctx_has "don't re-confirm"
+assert "a generic button never destroys"       ctx_has "never authorizes destruction"
+assert "names the targeted confirm"            ctx_has "fallback \`cancel\`"
+assert_not "not the full handling section"     ctx_has "The button label is the authorization"
+# The paragraph restates CORE_RULES Rules 7-8; this anchor must appear in both,
+# so rewording Rule 8's examples there fails here until the stub follows.
+ANCHOR='`rm -rf` outside the workdir'
+assert "CORE_RULES Rule 8 still has the anchor" grep -qF -- "$ANCHOR" "$SCRIPT_DIR/../docs/CORE_RULES.md"
+assert "and the condensed rule carries it"      ctx_has "$ANCHOR"
 # Rules 3/4/5/6/10/11 are REMOTE-scoped. Injecting them here is the regression
 # that made a terminal session block on a phone answer nobody was there to give.
 assert_not "no MANDATORY-ask rule"             ctx_has "NEVER end a response"
@@ -136,6 +148,7 @@ assert "carries the sticky-REMOTE contract"    ctx_has "State Detection"
 assert "carries the MANDATORY-ask rule"        ctx_has "NEVER end a response"
 assert "carries the AskUserQuestion override"  ctx_has "MUST go through"
 assert "carries the exit marker"               ctx_has "zeph: exit"
+assert "carries the full handling rules"       ctx_has "The button label is the authorization"
 assert "keeps Rule 13 (compaction)"            ctx_has "after context compaction"
 assert_not "no Push Signal section (ignored in REMOTE)" ctx_has "### Push Signal"
 

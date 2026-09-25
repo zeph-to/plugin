@@ -114,17 +114,50 @@ assert "emits additionalContext"         [ -n "$CTX" ]
 assert "context enters REMOTE mode"      grep -q "REMOTE mode" <<<"$CTX"
 assert "context names UserPromptSubmit"  grep -q '"hookEventName": *"UserPromptSubmit"' <<<"$OUT"
 assert "marker consumed (one-shot)"      [ ! -f "$(marker_path "$P")" ]
-# The transition turn is the only channel that ships Rule 9 in full: the
-# SessionStart hook gives a NORMAL session a two-line stub, because it cannot
-# know a phone message is coming. If this stops arriving, that stub is a
-# promise nothing keeps.
-assert "carries Rule 9 in full"          grep -q "State Detection" <<<"$CTX"
+# The transition turn is the only channel that ships Rule 9 (all but its NORMAL
+# subsection): the SessionStart hook gives a NORMAL session a two-line stub,
+# because it cannot know a phone message is coming. If this stops arriving,
+# that stub is a promise nothing keeps.
+assert "carries Rule 9"                  grep -q "State Detection" <<<"$CTX"
 assert "including the exit marker"       grep -q "zeph: exit" <<<"$CTX"
 assert "and the REMOTE timeout window"   grep -q "300–600 s" <<<"$CTX"
+# NORMAL behaviour is already in context from SessionStart (this session was
+# NORMAL until now), so entry leaves that subsection out — heading and body.
+assert_not "without the NORMAL subsection" grep -q "no zeph_ask is owed" <<<"$CTX"
+assert_not "nor its body"                  grep -q "never as a way to mark a turn finished" <<<"$CTX"
 # Same ceiling the SessionStart hook is held to: above 10,000 chars Claude
 # Code persists additionalContext to a file and hands the model a 2,000-char
 # preview, which would cut Rule 9 off right where it starts.
 assert "stays under the inline ceiling"  [ "${#CTX}" -le 10000 ]
+
+echo
+echo "[REMOTE already live + matching phone prompt → short note, not the contract again]"
+# The contract arrived on the entry turn (or with SessionStart after a compact)
+# and is still in context; repeating 3.4k chars on every phone message was the
+# largest recurring cost Zeph put into a session.
+P="$WORK/proj-repeat"
+write_state "$P" 60
+BEFORE=$(cat "$(state_path "$P")")
+write_marker "$P" "run the tests"
+CTX=$(run_hook "run the tests" "$P" "hook_123" | ctx_of)
+assert "still notes the phone message"   grep -q "arrived from the user's phone" <<<"$CTX"
+assert "says REMOTE continues"           grep -q "REMOTE continues" <<<"$CTX"
+assert "names the ask it owes"           grep -q "zeph_ask" <<<"$CTX"
+assert "names the exits"                grep -q "typed at the terminal" <<<"$CTX"
+assert "including the wrap-up marker"    grep -q "zeph: exit" <<<"$CTX"
+assert_not "does not repeat the contract" grep -q "State Detection" <<<"$CTX"
+assert "stays short"                     [ "${#CTX}" -le 450 ]
+assert "state refreshed"                 [ "$(cat "$(state_path "$P")")" -gt "$BEFORE" ]
+assert "marker consumed"                 [ ! -f "$(marker_path "$P")" ]
+
+echo
+echo "[REMOTE state past its TTL + matching phone prompt → full contract (an entry)]"
+P="$WORK/proj-expired"
+write_state "$P" 20000
+write_marker "$P" "picking this up again"
+CTX=$(run_hook "picking this up again" "$P" "hook_123" | ctx_of)
+assert "carries Rule 9"                  grep -q "State Detection" <<<"$CTX"
+assert "state renewed"                   [ -f "$(state_path "$P")" ]
 
 echo
 echo "[matching prompt, ZEPH_HOOK_ID unset → one-way conversion CTA]"
@@ -315,6 +348,22 @@ OUT=$(run_hook 'Another Claude session sent a message:
 </agent-message>' "$P" "hook_123")
 assert "no output"   [ -z "$OUT" ]
 assert "state kept"  [ -f "$(state_path "$P")" ]
+
+echo
+echo "[sticky state alive, report starting at the bare <agent-message> wrapper → REMOTE kept]"
+# A queued subagent hand-back ended a live REMOTE session (2.1.281 transcript,
+# 2026-09-25): its queue entry starts at this wrapper, with no "Another Claude
+# session sent a message:" line. Whether the hook saw exactly this form is
+# inferred, not captured — the prefix is matched either way. Own project dir, so
+# a regression here cannot cascade into the blocks below.
+PQ="$WORK/proj-queued"
+mkdir -p "$PQ"
+write_state "$PQ"
+OUT=$(run_hook '<agent-message from="a1b2c3">
+[Subagent hand-back] report body
+</agent-message>' "$PQ" "hook_123")
+assert "no output"   [ -z "$OUT" ]
+assert "state kept"  [ -f "$(state_path "$PQ")" ]
 
 echo
 echo "[the other system wordings (mid-turn peer, cross-session wrapper, plugin) → REMOTE kept]"

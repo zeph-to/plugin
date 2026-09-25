@@ -37,7 +37,7 @@ The plugin installs 4 hooks that fire automatically on Claude Code events:
 | `/zeph-mode mute` marker for this project | three lines: hooks are silent, don't call the tools unless asked | ~220 B |
 | No hook id (`ZEPH_HOOK_ID` env or `hookId` in `~/.zeph/config.json`) | one-way notify discipline (`zeph_ask` does not exist) | ~1.3 KB |
 | Sticky REMOTE live (`remote-active-<hash>`) | the sticky-REMOTE contract in full — Rules 1-3, 7-11, 13 (Rule 4 is subsumed by Rule 9 there) — and no Push Signal, since markers are ignored on a turn that already sent `zeph_ask` | ~7.4 KB |
-| Otherwise | the NORMAL branch: notify discipline, Push Signal, and what starts REMOTE. No ask rules — every one of them is REMOTE-scoped, so a session at the terminal never blocks on a phone answer | ~3.1–3.6 KB |
+| Otherwise | the NORMAL branch: notify discipline, Push Signal, Rules 7-8 condensed to one paragraph (the full section rides only in the REMOTE branch above; a session entered from the phone keeps this paragraph), and what starts REMOTE. No ask rules — every one of them is REMOTE-scoped, so a session at the terminal never blocks on a phone answer | ~3.0–3.3 KB |
 
 The Push Signal section follows the project's push-mode dial: on `quiet` (the
 stock default) only the `high` marker does anything, so only that one is
@@ -295,6 +295,16 @@ ls "${XDG_STATE_HOME:-$HOME/.local/state}/zeph/muted-$HASH"
 - On match: consumes the marker (one-shot), records the mode in the state file
   below, and injects context telling the model the user is remote → sticky
   REMOTE mode (every response ends with an answerable `zeph_ask`)
+- Entry ships Rule 9 without its `#### Behavior in NORMAL` subsection (the
+  session was NORMAL until then, so SessionStart already said it — except a
+  session that started muted and was unmuted). A phone message on a session
+  that is already in REMOTE gets a short "REMOTE continues" note instead
+  (~0.4 KB, against ~2.9 KB for entry).
+  The contract is usually still in context from the entry turn, or from
+  SessionStart after a compact. The state is per project, so a session that
+  entered REMOTE mid-turn from a `zeph_ask` answer, one that started muted, or
+  a second session in the same directory gets the note without it; the note
+  carries the operative rule (end with `zeph_ask`, and the exits) for them
 - Without a hook id: one-way variant — tells the model to make the
   Stop-hook push self-contained and mention `npx @zeph-to/cli setup` once. No
   state is recorded: without `zeph_ask` there is no mode to stay in. The hook
@@ -313,7 +323,8 @@ ls "${XDG_STATE_HOME:-$HOME/.local/state}/zeph/muted-$HASH"
 - Exception: turns Claude Code writes itself — `<task-notification>` (a
   background task or MCP call finished), a subagent or peer report (`Another
   Claude session sent a message…`, `A peer session sent a message…`,
-  `<cross-session-message`), or a plugin-submitted prompt (`The <name> plugin
+  `<cross-session-message`, or the bare `<agent-message` wrapper), or a
+  plugin-submitted prompt (`The <name> plugin
   sent a message…`). They reach UserPromptSubmit with no marker, and the hook
   input carries no origin field, so `system_turn` matches the prompt prefix and
   leaves the mode alone. It matters because a `zeph_ask`

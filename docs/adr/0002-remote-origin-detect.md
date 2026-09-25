@@ -221,7 +221,11 @@ The hook input has no origin field (common fields plus `prompt` and
 (`system_turn`) and leaves the mode alone for these turns. The prefix list
 comes from the Claude Code 2.1.282 binary: task notifications, the peer
 wordings between turns and mid-turn, the raw `<cross-session-message` wrapper,
-and plugin-submitted prompts. Only the exit branch
+and plugin-submitted prompts. The bare `<agent-message` wrapper was added on
+2026-09-25, after a queued subagent report ended a live REMOTE session; its
+queue entry started at that wrapper with no wording line. The exact hook input
+was not captured, and an earlier queued report the same day did not end REMOTE,
+so the trigger is inferred. Only the exit branch
 asks, so the jq spawn is paid only while REMOTE is live. If Claude Code changes
 the format, the check stops matching and the old behaviour returns (REMOTE
 ends), never a REMOTE that cannot be left. The TS twin is unchanged: the
