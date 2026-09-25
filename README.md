@@ -189,7 +189,8 @@ zeph-to/plugin (Claude Code plugin)
   ├─ hooks/zeph-stop.sh    → Stop: auto completion push
   ├─ hooks/zeph-ask.sh     → PreToolUse: question push
   ├─ hooks/zeph-remote.sh  → UserPromptSubmit: phone-sent message → REMOTE mode
-  ├─ .mcp.json             → registers the MCP server (`zeph mcp`)
+  ├─ .mcp.json             → registers the MCP server (`zeph mcp`); `ZEPH_API_KEY` is optional
+  │                          (`${ZEPH_API_KEY:-}` — unset, the key comes from ~/.zeph/config.json)
   └─ builds on:
       ├─ @zeph-to/cli         → hooks + notify/list/dismiss + tmux remote control
       └─ @zeph-to/mcp-server  → zeph_ask / notify / clipboard / file …
