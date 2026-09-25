@@ -288,6 +288,66 @@ OUT=$(run_hook "and another one" "$P" "hook_123")
 assert "no output"  [ -z "$OUT" ]
 
 echo
+echo "[sticky state alive, Claude Code task-notification turn → not the keyboard, REMOTE kept]"
+# A zeph_ask that outlives Claude Code's MCP auto-background window returns the
+# phone answer as a <task-notification> turn — a prompt with no marker.
+P="$WORK/proj-system-turn"
+write_state "$P"
+TN='<task-notification>
+<task-id>ks07i7m2l</task-id>
+<status>completed</status>
+<summary>MCP task ks07i7m2 (plugin:zeph:zeph/zeph_ask) completed.</summary>
+<result>
+{"value":"answered on the phone","timedOut":false,"zephState":"REMOTE"}
+</result>
+</task-notification>'
+OUT=$(run_hook "$TN" "$P" "hook_123")
+RC=$?
+assert "exit 0"      [ "$RC" -eq 0 ]
+assert "no output"   [ -z "$OUT" ]
+assert "state kept"  [ -f "$(state_path "$P")" ]
+
+echo
+echo "[sticky state alive, subagent/peer report turn → not the keyboard, REMOTE kept]"
+OUT=$(run_hook 'Another Claude session sent a message:
+<agent-message from="a1b2c3">
+  report body
+</agent-message>' "$P" "hook_123")
+assert "no output"   [ -z "$OUT" ]
+assert "state kept"  [ -f "$(state_path "$P")" ]
+
+echo
+echo "[the other system wordings (mid-turn peer, cross-session wrapper, plugin) → REMOTE kept]"
+for SYS in \
+    'Another Claude session sent a message while you were working:
+report body' \
+    'A peer session sent a message while you were working:
+report body' \
+    '<cross-session-message from="a1b2c3">
+report body
+</cross-session-message>' \
+    'The ralph plugin sent a message:
+keep going'; do
+    OUT=$(run_hook "$SYS" "$P" "hook_123")
+    assert "no output: ${SYS%%$'\n'*}"   [ -z "$OUT" ]
+    assert "state kept: ${SYS%%$'\n'*}"  [ -f "$(state_path "$P")" ]
+done
+
+echo
+echo "[a prompt typed at the terminal after those → still leaves REMOTE]"
+CTX=$(run_hook "typed at the terminal after the notification" "$P" "hook_123" | ctx_of)
+assert "says REMOTE has ended"  grep -q "LEFT sticky REMOTE mode" <<<"$CTX"
+assert "state cleared"          [ ! -f "$(state_path "$P")" ]
+
+echo
+echo "[the prefix must lead the prompt — typed text that mentions it still leaves]"
+P="$WORK/proj-system-mention"
+write_state "$P"
+CTX=$(run_hook "why did <task-notification> end REMOTE?" "$P" "hook_123" | ctx_of)
+assert "says REMOTE has ended"  grep -q "LEFT sticky REMOTE mode" <<<"$CTX"
+assert "state cleared"          [ ! -f "$(state_path "$P")" ]
+
+echo
 echo "[fresh marker left unmatched → REMOTE survives (a phone message is in flight)]"
 # The digest missing is not evidence the user typed: the message may be queued
 # behind a long turn, or the two sides may hash a composition differently.

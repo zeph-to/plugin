@@ -201,6 +201,32 @@ carries a real value, else the config file); the TS twin does the same via
 cli `config.ts`. The funnel branch keeps its purpose — it fires only when no
 hook id exists anywhere.
 
+## Amendment (2026-09-25) — turns Claude Code writes itself are not the keyboard
+
+The 2026-08-12 amendment rests on "a phone answer to a `zeph_ask` comes back as
+a `tool_result` and never reaches a prompt hook". Claude Code broke that
+premise. An MCP call still running after its auto-background window (120 s by
+default in Claude Code 2.1.282, `CLAUDE_CODE_MCP_AUTO_BACKGROUND_MS`), or one
+that is waiting when another message lands, moves to the background, and its
+result arrives as a new turn whose prompt is a `<task-notification>` block.
+That turn runs UserPromptSubmit with no marker, so the hook read the phone
+answer as the user typing and ended REMOTE. The Rule 9 ask timeout is 300–600
+s, so any answer slower than two minutes did this. Subagent and peer reports
+(`Another Claude session sent a message:`) took the same path. In one observed
+case (2026-09-25) a notification that landed mid-turn cleared the state and no
+LEFT note appeared in the transcript, so REMOTE ended with no notice.
+
+The hook input has no origin field (common fields plus `prompt` and
+`session_title`), so the exit branch now checks the prompt prefix
+(`system_turn`) and leaves the mode alone for these turns. The prefix list
+comes from the Claude Code 2.1.282 binary: task notifications, the peer
+wordings between turns and mid-turn, the raw `<cross-session-message` wrapper,
+and plugin-submitted prompts. Only the exit branch
+asks, so the jq spawn is paid only while REMOTE is live. If Claude Code changes
+the format, the check stops matching and the old behaviour returns (REMOTE
+ends), never a REMOTE that cannot be left. The TS twin is unchanged: the
+agents it serves (Gemini, Codex, Pi) do not produce these turns.
+
 ## Related
 - ADR-0001 (Push Signal): the marker precedent and the "plugin-only vs coupled
   release" trade-off this ADR consciously takes the other side of.
