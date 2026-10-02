@@ -43,7 +43,7 @@ IN_HERDR="wF:p1\t/sock\t$STUB_DIR/herdr"
 run() {
     local before after i
     before=$(wc -l < "$LOG")
-    echo '{}' | env PATH="$STUB_DIR:/usr/bin:/bin" TMPDIR="$WORK/tmp" TMUX="${T-/tmp/tmux,1,0}" TMUX_PANE="${P:-%1}" OPTS="$OPTS" \
+    echo '{}' | env PATH="$STUB_DIR:/usr/bin:/bin" CLAUDE_CODE_ENTRYPOINT="${CLAUDE_CODE_ENTRYPOINT:-cli}" TMPDIR="$WORK/tmp" TMUX="${T-/tmp/tmux,1,0}" TMUX_PANE="${P:-%1}" OPTS="$OPTS" \
         bash "$HOOK_SCRIPT" "$1"
     for i in $(seq 1 20); do
         after=$(wc -l < "$LOG")
@@ -63,6 +63,8 @@ OPTS="\t\t" run working
 check "tmux session without herdr options: nothing sent" 0 "$(calls)"
 OPTS="$IN_HERDR" run tool
 check "tool call with nothing blocked: nothing sent" 0 "$(calls)"
+CLAUDE_CODE_ENTRYPOINT=sdk-cli OPTS="$IN_HERDR" run start
+check "headless claude -p in the pane: nothing sent" 0 "$(calls)"
 
 echo "lifecycle"
 reset

@@ -23,6 +23,11 @@
 read -r -d '' _ 2>/dev/null   # hook input is unused; drain it (a builtin: no fork per tool call)
 
 [ -n "${TMUX:-}" ] && [ -n "${TMUX_PANE:-}" ] || exit 0
+# Interactive only. A `claude -p` run from a shell in this pane inherits
+# TMUX_PANE, and its SessionEnd would release the pane's real agent. Claude Code
+# sets `cli` for the TUI and `sdk-cli` for -p (measured 2026-10-02); unset is an
+# older build, which is interactive more often than not.
+[ "${CLAUDE_CODE_ENTRYPOINT:-cli}" = cli ] || exit 0
 
 event="${1:-}"
 state_dir="${TMPDIR:-/tmp}/zeph-herdr"

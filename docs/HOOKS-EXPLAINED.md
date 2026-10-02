@@ -410,7 +410,9 @@ herdr pane on every attach as tmux session options — `@zeph_herdr_pane`,
 `@zeph_herdr_socket`, `@zeph_herdr_bin` — and clears them on an attach from outside
 herdr. The hook reads them with one `tmux display-message`. No options means no
 herdr, so the hook does nothing, including for plain `claude` in a herdr pane, which
-herdr detects on its own.
+herdr detects on its own. It also no-ops for a headless `claude -p`
+(`CLAUDE_CODE_ENTRYPOINT=sdk-cli`): one started from a shell in the pane inherits
+`TMUX_PANE`, and its SessionEnd would otherwise release the pane's real agent.
 
 | Event | State |
 |-------|-------|
