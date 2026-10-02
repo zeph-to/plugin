@@ -6,7 +6,7 @@ How the four Claude Code hooks work, what they do, and how to debug them.
 
 ## Overview
 
-The plugin installs 4 hooks that fire automatically on Claude Code events:
+The plugin installs these hooks, which fire automatically on Claude Code events:
 
 | Hook | Event | File | Purpose |
 |------|-------|------|---------|
@@ -14,6 +14,7 @@ The plugin installs 4 hooks that fire automatically on Claude Code events:
 | **Stop** | Response ends | zeph-stop.sh | Send completion notification if work was done |
 | **PreToolUse** (Ask) | Before AskUserQuestion | zeph-ask.sh | Send notification when Claude asks user a question |
 | **UserPromptSubmit** | Prompt submitted | zeph-remote.sh | Flag phone-sent (and agent-sent) messages, and hold sticky REMOTE mode across later turns (ADR-0002) |
+| **herdr** | SessionStart · UserPromptSubmit · Stop · Notification · Pre/PostToolUse · SessionEnd | zeph-herdr.sh | Report `working`/`idle`/`blocked` to [herdr](https://herdr.dev) for a `zeph cc` session — no-op outside one |
 
 ---
 
@@ -393,6 +394,43 @@ printf '%s' "fix the login bug" | shasum -a 256
 # Requires the cli listener new enough to write markers (release order:
 # cli ships first) and jq on PATH; without either the hook no-ops.
 ```
+
+---
+
+## herdr Hook (zeph-herdr.sh)
+
+**Why.** herdr finds agents by a pane's foreground process. In a `zeph cc` pane that
+is the tmux client — Claude Code runs under the tmux server — so the agent never
+showed in herdr's sidebar. The hook reports the state itself through herdr's
+report API (`herdr pane report-agent`), labelled `zeph cc`. herdr ignores a report
+labelled `claude`, the name of an agent it supports natively (measured on herdr 0.9.3).
+
+**Which pane.** The CLI wrapper (`@zeph-to/cli`, README "Inside herdr") records the
+herdr pane on every attach as tmux session options — `@zeph_herdr_pane`,
+`@zeph_herdr_socket`, `@zeph_herdr_bin` — and clears them on an attach from outside
+herdr. The hook reads them with one `tmux display-message`. No options means no
+herdr, so the hook does nothing, including for plain `claude` in a herdr pane, which
+herdr detects on its own. It also no-ops for a headless `claude -p`
+(`CLAUDE_CODE_ENTRYPOINT=sdk-cli`): one started from a shell in the pane inherits
+`TMUX_PANE`, and its SessionEnd would otherwise release the pane's real agent.
+
+| Event | State |
+|-------|-------|
+| SessionStart | `idle` (claims the pane) |
+| UserPromptSubmit | `working` |
+| Notification `permission_prompt` / `elicitation_dialog`, PreToolUse `AskUserQuestion` | `blocked` |
+| PostToolUse | `working`, only if the last report was `blocked` |
+| Stop, Notification `idle_prompt` | `idle` |
+| SessionEnd | release the pane |
+
+`idle_prompt` covers an Esc interrupt, which fires no Stop: the pane reads `working`
+until Claude Code's idle notification fires.
+
+**Cost.** PostToolUse runs on every tool call, so its common case exits after
+reading one state file in `$TMPDIR/zeph-herdr/`, before any tmux call. A state equal
+to the last one sent is not resent, and `herdr` runs detached. `--seq` is
+microseconds since the epoch, bumped past the last one sent, because herdr drops a
+report whose seq is not above the last it accepted from the source.
 
 ---
 
