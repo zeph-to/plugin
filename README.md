@@ -189,6 +189,7 @@ zeph-to/plugin (Claude Code plugin)
   ├─ hooks/zeph-stop.sh    → Stop: auto completion push
   ├─ hooks/zeph-ask.sh     → PreToolUse: question push
   ├─ hooks/zeph-remote.sh  → UserPromptSubmit: phone-sent message → REMOTE mode
+  ├─ hooks/zeph-herdr.sh   → agent state → herdr sidebar, for a `zeph cc` pane
   ├─ .mcp.json             → registers the MCP server (`zeph mcp`); `ZEPH_API_KEY` is optional
   │                          (`${ZEPH_API_KEY:-}` — unset, the key comes from ~/.zeph/config.json)
   └─ builds on:
