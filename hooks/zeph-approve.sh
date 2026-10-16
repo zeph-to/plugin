@@ -24,6 +24,10 @@
 # AskUserQuestion hook next door — there `allow` is the safe direction, here it
 # is the dangerous one.
 
+# Sunset gate (hooks/sunset.sh): on/after 2026-11-01 this hook does nothing.
+. "$(dirname "${BASH_SOURCE[0]}")/sunset.sh"
+zeph_sunset_ended && exit 0
+
 command -v jq >/dev/null 2>&1 || exit 0
 
 . "$(dirname "${BASH_SOURCE[0]}")/gate.sh"

@@ -24,6 +24,8 @@ metadata:
     - ask user
 ---
 
+> Zeph agent features end on 2026-11-01. After that this plugin does nothing; remove it with: `claude plugin uninstall zeph@zeph`.
+
 # Zeph — AI Agent Notification Skill
 
 Use Zeph MCP tools to communicate with the user across devices (mobile, browser, desktop).

@@ -44,6 +44,14 @@ each one would have failed before the corresponding fix landed:
 | `push mode quiet / loud` | The `pushmode-<hash>` dial — quiet keeps only high pushes while the user is present, loud pushes every turn (still respecting dedup), cleared restores the default. |
 | `away: …` | `zeph_is_away` with stubbed `tmux`/`ioreg` on PATH — quiet pushes once the user is away (HID idle, no tmux client, stale `client_activity` over SSH), a readable HID outranks tmux, failed probes and a broken `ZEPH_AWAY_SEC` read as present/default, and normal/loud/high turns never probe. |
 
+### test-sunset.sh (sunset gate)
+
+Runs every hook with `ZEPH_SUNSET_TODAY` on and after 2026-11-01 and asserts exit 0,
+empty output (approve never denies) and an empty call log for `zeph`/`npx`/`curl`/
+`herdr`/`tmux` PATH stubs; the setup hook's before-D and after-D lines; the
+day-before boundary. The other hook suites pin the clock to a date before D so they
+keep testing live behavior after the real date passes.
+
 ### zeph-ask.sh
 
 | Test | Catches |

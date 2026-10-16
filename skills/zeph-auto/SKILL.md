@@ -22,6 +22,8 @@ metadata:
     - /zeph-auto
 ---
 
+> Zeph agent features end on 2026-11-01. After that this plugin does nothing; remove it with: `claude plugin uninstall zeph@zeph`.
+
 # Zeph Auto — Time-Boxed Autonomous Work Mode
 
 Work autonomously for a fixed time budget: explore → plan → implement → verify →

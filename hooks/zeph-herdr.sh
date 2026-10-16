@@ -20,6 +20,10 @@
 # Never slows Claude Code down: herdr runs in the background, failures are
 # ignored, and a state equal to the last one reported is not sent again.
 
+# Sunset gate (hooks/sunset.sh): on/after 2026-11-01 this hook does nothing.
+. "$(dirname "${BASH_SOURCE[0]}")/sunset.sh"
+zeph_sunset_ended && exit 0
+
 read -r -d '' _ 2>/dev/null   # hook input is unused; drain it (a builtin: no fork per tool call)
 
 [ -n "${TMUX:-}" ] && [ -n "${TMUX_PANE:-}" ] || exit 0

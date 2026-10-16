@@ -1,5 +1,11 @@
 # Zeph — notifications & remote control for AI coding agents
 
+> **Zeph's AI-agent features end on 2026-11-01 (00:00 UTC).** From that day the server refuses agent calls and this plugin's hooks do nothing (they exit immediately; no network, no CLI calls). Remove the plugin with:
+>
+> ```bash
+> claude plugin uninstall zeph@zeph
+> ```
+
 [![release](https://img.shields.io/github/v/release/zeph-to/plugin?label=plugin&sort=semver)](https://github.com/zeph-to/plugin/releases)
 [![marketplace](https://img.shields.io/badge/claude--code-plugin-blueviolet)](https://github.com/zeph-to/plugin)
 [![cli](https://img.shields.io/npm/v/@zeph-to/cli?label=%40zeph-to%2Fcli)](https://www.npmjs.com/package/@zeph-to/cli)
