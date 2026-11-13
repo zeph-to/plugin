@@ -434,6 +434,17 @@ report whose seq is not above the last it accepted from the source.
 
 ---
 
+## Sunset (2026-11-01)
+
+Zeph's agent features end on 2026-11-01 (D). Every registered hook — setup, stop,
+ask, approve, remote, herdr — starts with `zeph_sunset_ended && exit 0`
+(`hooks/sunset.sh`; `zeph-setup.js` carries the same comparison in JS), so on or
+after D it exits 0 before any network, `zeph`/`npx` call or wait, and
+`zeph-approve.sh` fails open (never a deny). Before D the SessionStart hook adds one
+line with the end date; on or after D that line is its only output. The date
+compares `date -u +%Y-%m-%d` as a string; `ZEPH_SUNSET_TODAY=YYYY-MM-DD` overrides
+"today" (tests: `tests/test-sunset.sh`).
+
 ## Full Event Timeline
 
 Here's what happens during a typical Claude Code session:

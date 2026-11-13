@@ -30,6 +30,34 @@ const os = require('os');
 const path = require('path');
 const { execSync } = require('child_process');
 
+// ── Sunset gate ─────────────────────────────────────────────────────────────
+// Zeph's agent features end on 2026-11-01 (D); on/after D this hook emits one
+// line and nothing else — no config read, no child process. Same comparison as
+// hooks/sunset.sh (the bash hooks' copy); ZEPH_SUNSET_TODAY overrides "today".
+// tests/test-sunset.sh locks both.
+const SUNSET_DATE = '2026-11-01';
+const today = process.env.ZEPH_SUNSET_TODAY || new Date().toISOString().slice(0, 10);
+const ended = today >= SUNSET_DATE;
+const SUNSET_NOTE = ended
+    ? `Zeph agent features ended on ${SUNSET_DATE}. This plugin no longer does anything; remove it with: claude plugin uninstall zeph@zeph`
+    : `Zeph agent features end on ${SUNSET_DATE}. After that this plugin does nothing; remove it with: claude plugin uninstall zeph@zeph`;
+
+// Before D the note rides along on every branch's context; on/after D it is
+// the whole output.
+const emit = (additionalContext) => {
+    process.stdout.write(JSON.stringify({
+        hookSpecificOutput: {
+            hookEventName: 'SessionStart',
+            additionalContext: ended ? SUNSET_NOTE : `${additionalContext}\n\n${SUNSET_NOTE}`,
+        },
+    }));
+};
+
+if (ended) {
+    emit('');
+    process.exit(0);
+}
+
 const configFile = path.join(os.homedir(), '.zeph', 'config.json');
 let config = {};
 try { config = JSON.parse(fs.readFileSync(configFile, 'utf-8')); } catch {}
@@ -48,15 +76,6 @@ const hookId = envOr('ZEPH_HOOK_ID') || config.hookId;
 const hasJq = (() => {
     try { execSync('command -v jq', { stdio: 'pipe' }); return true; } catch { return false; }
 })();
-
-const emit = (additionalContext) => {
-    process.stdout.write(JSON.stringify({
-        hookSpecificOutput: {
-            hookEventName: 'SessionStart',
-            additionalContext,
-        },
-    }));
-};
 
 if (!apiKey) {
     emit(

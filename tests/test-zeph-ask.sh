@@ -8,6 +8,11 @@
 
 set -uo pipefail
 
+# Pin the sunset clock before D (hooks/sunset.sh): these cases test live hook
+# behavior and must not turn into no-ops when the real date passes 2026-11-01.
+# tests/test-sunset.sh covers the after-D behavior.
+export ZEPH_SUNSET_TODAY=2026-10-01
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HOOK_SCRIPT="$SCRIPT_DIR/../hooks/zeph-ask.sh"
 

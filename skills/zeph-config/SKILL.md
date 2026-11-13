@@ -20,6 +20,8 @@ metadata:
     - /zeph-config
 ---
 
+> Zeph agent features end on 2026-11-01. After that this plugin does nothing; remove it with: `claude plugin uninstall zeph@zeph`.
+
 Set up Zeph for the user. **The entire setup is install the CLI, then run
 `zeph install`** — everything else in this skill is verification.
 

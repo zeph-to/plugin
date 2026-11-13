@@ -2,6 +2,10 @@
 # PreToolUse(AskUserQuestion) hook — push the asked question to the user's
 # device so they can see it without being at the terminal.
 
+# Sunset gate (hooks/sunset.sh): on/after 2026-11-01 this hook does nothing.
+. "$(dirname "${BASH_SOURCE[0]}")/sunset.sh"
+zeph_sunset_ended && exit 0
+
 ZEPH_CMD="$(command -v zeph 2>/dev/null || echo "npx -y @zeph-to/cli")"
 
 command -v jq >/dev/null 2>&1 || exit 0

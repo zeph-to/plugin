@@ -28,6 +28,10 @@
 # No marker and no live state → silent no-op. This hook only ever adds context
 # and must never block a prompt (always exit 0).
 
+# Sunset gate (hooks/sunset.sh): on/after 2026-11-01 this hook does nothing.
+. "$(dirname "${BASH_SOURCE[0]}")/sunset.sh"
+zeph_sunset_ended && exit 0
+
 command -v jq >/dev/null 2>&1 || exit 0
 
 # Shared hook library (hooks/gate.sh): state-file resolution.

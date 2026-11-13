@@ -11,6 +11,10 @@
 #     user is at the terminal — see zeph_is_away)
 # The user can also force a push every turn with /zeph-mode loud.
 
+# Sunset gate (hooks/sunset.sh): on/after 2026-11-01 this hook does nothing.
+. "$(dirname "${BASH_SOURCE[0]}")/sunset.sh"
+zeph_sunset_ended && exit 0
+
 command -v jq >/dev/null 2>&1 || exit 0
 
 # Shared hook library: the pure gate decision (parity-locked to the CLI via

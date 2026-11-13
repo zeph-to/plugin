@@ -19,6 +19,8 @@ metadata:
     - /zeph-mode
 ---
 
+> Zeph agent features end on 2026-11-01. After that this plugin does nothing; remove it with: `claude plugin uninstall zeph@zeph`.
+
 Run this, exactly as written — the arguments go on the heredoc's second line,
 never onto the command itself, on one line, and only the words `quiet` `normal`
 `loud` `mute` `unmute` `--global`:
